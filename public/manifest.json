@@ -1,0 +1,22 @@
+
+{
+  "name": "MyOvae - PCOS Wellness Companion",
+  "short_name": "MyOvae",
+  "description": "Your Personal Guide Through PCOS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#120E2C",
+  "theme_color": "#8B5CF6",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
