@@ -1,51 +1,80 @@
-
 // A basic service worker for PWA functionality (caching, offline support)
 
 const CACHE_NAME = 'myovae-cache-v1';
-const urlsToCache = [
-  '/',
-  '/dashboard',
+const IMMUTABLE_URLS = [
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png'
 ];
 
+const AUTH_PATH_PATTERNS = [/^\/dashboard(\/|$)/, /^\/users(\/|$)/, /^\/communityPosts(\/|$)/];
+
+const isSensitivePath = (url) => {
+  try {
+    const parsedUrl = new URL(url, self.location.origin);
+    if (parsedUrl.origin !== self.location.origin) {
+      return false;
+    }
+
+    return AUTH_PATH_PATTERNS.some(pattern => pattern.test(parsedUrl.pathname));
+  } catch (error) {
+    // If parsing fails, default to not caching the request.
+    return true;
+  }
+};
+
+const clearSensitiveCacheEntries = async () => {
+  const cache = await caches.open(CACHE_NAME);
+  const keys = await cache.keys();
+  await Promise.all(
+    keys
+      .filter(request => isSensitivePath(request.url))
+      .map(request => cache.delete(request))
+  );
+};
+
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => {
-        // console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
+      .then(cache => cache.addAll(IMMUTABLE_URLS))
   );
 });
 
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  let requestUrl;
+
+  try {
+    requestUrl = new URL(event.request.url);
+  } catch (error) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  if (isSensitivePath(requestUrl.href)) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        // Cache hit - return response
         if (response) {
           return response;
         }
 
-        // IMPORTANT: Clone the request. A request is a stream and
-        // can only be consumed once. Since we are consuming this
-        // once by cache and once by the browser for fetch, we need
-        // to clone the response.
         const fetchRequest = event.request.clone();
 
         return fetch(fetchRequest).then(
           response => {
-            // Check if we received a valid response
             if (!response || response.status !== 200 || response.type !== 'basic') {
               return response;
             }
 
-            // IMPORTANT: Clone the response. A response is a stream
-            // and because we want the browser to consume the response
-            // as well as the cache consuming the response, we need
-            // to clone it so we have two streams.
             const responseToCache = response.clone();
 
             caches.open(CACHE_NAME)
@@ -58,6 +87,12 @@ self.addEventListener('fetch', event => {
         );
       })
   );
+});
+
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'CLEAR_PRIVATE_CACHE') {
+    event.waitUntil(clearSensitiveCacheEntries());
+  }
 });
 
 self.addEventListener('activate', event => {
