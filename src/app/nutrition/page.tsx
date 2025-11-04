@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Camera, Upload, BarChart2, Sparkles, X, Loader2, Edit } from "lucide-react";
 import { m, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
-import { analyzeMealPhoto } from '@/ai/flows/ai-nutrition-scoring';
 import { analyzeMealText } from '@/ai/flows/ai-nutrition-scoring-text';
 import Image from 'next/image';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -124,7 +123,19 @@ const MealPhotoLogger = ({ onAnalysisComplete, onAnalysisStart, onClear, isLoadi
   const analyzePhoto = async (dataUrl: string) => {
     onAnalysisStart();
     try {
-      const result = await analyzeMealPhoto({ photoDataUri: dataUrl });
+      const response = await fetch('/api/ai/analyze-meal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ photoDataUri: dataUrl }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const result = (await response.json()) as AnalysisResult;
       onAnalysisComplete(result);
     } catch (error) {
       toast({
