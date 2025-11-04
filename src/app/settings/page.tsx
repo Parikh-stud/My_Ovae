@@ -319,13 +319,20 @@ const PrivacySettings = () => {
     const privacySettings = [
         { id: 'provider_sharing', label: 'Healthcare Provider Access', description: 'Allow connected providers to view your data.' },
         { id: 'research_contribution', label: 'Anonymous Research', description: 'Contribute anonymized data to PCOS research.' },
+        { id: 'ai_data_sharing', label: 'AI Wellness Insights', description: 'Allow anonymized data to power AI coaching tips and predictions.' },
     ];
-    
+
+    const defaultPrivacyPreferences = {
+        provider_sharing: false,
+        research_contribution: true,
+        ai_data_sharing: false,
+    };
+
     useEffect(() => {
         if (userProfile?.onboarding?.privacySettings) {
-            setPreferences(userProfile.onboarding.privacySettings);
+            setPreferences({ ...defaultPrivacyPreferences, ...userProfile.onboarding.privacySettings });
         } else if (userProfile) {
-             setPreferences({ provider_sharing: false, research_contribution: true });
+            setPreferences(defaultPrivacyPreferences);
         }
     }, [userProfile]);
 

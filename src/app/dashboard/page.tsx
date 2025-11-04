@@ -29,6 +29,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { sanitizeNutritionLogs, sanitizeSymptomLogs, sanitizeWorkoutLogs } from "@/lib/ai/redact";
 import { generateCoachingTip } from "@/ai/flows/ai-generated-coaching";
 import { predictSymptomFlareUp, SymptomPredictorOutput } from "@/ai/flows/ai-symptom-predictor";
 import { useUserProfile } from "@/hooks/use-user-profile";
@@ -112,7 +113,7 @@ const CommunityPostItem = ({ post }: { post: any }) => {
     )
 }
 
-const SymptomPredictor = () => {
+const SymptomPredictor = ({ aiDataSharingEnabled, isPrivacyLoaded }: { aiDataSharingEnabled: boolean; isPrivacyLoaded: boolean }) => {
     const [targetSymptom, setTargetSymptom] = useState<string>('');
     const [prediction, setPrediction] = useState<SymptomPredictorOutput | null>(null);
     const [isPredicting, setIsPredicting] = useState(false);
@@ -126,8 +127,17 @@ const SymptomPredictor = () => {
     }, [user, firestore]);
     const { data: historicalSymptoms, isLoading: isLoadingSymptoms } = useCollection(symptomsQuery);
 
+    const sanitizedHistoricalSymptoms = useMemo(
+        () => sanitizeSymptomLogs(historicalSymptoms || []),
+        [historicalSymptoms]
+    );
+
     const handlePredict = async () => {
-        if (!targetSymptom || !historicalSymptoms) {
+        if (!aiDataSharingEnabled) {
+            return;
+        }
+
+        if (!targetSymptom || !historicalSymptoms || historicalSymptoms.length === 0 || sanitizedHistoricalSymptoms.length === 0) {
             toast({ variant: 'destructive', title: 'Missing Information', description: 'Please select a symptom and ensure you have logged some data.' });
             return;
         }
@@ -136,7 +146,7 @@ const SymptomPredictor = () => {
         try {
             const result = await predictSymptomFlareUp({
                 targetSymptom,
-                historicalData: JSON.stringify(historicalSymptoms),
+                historicalData: JSON.stringify(sanitizedHistoricalSymptoms),
             });
             setPrediction(result);
         } catch (error) {
@@ -153,8 +163,18 @@ const SymptomPredictor = () => {
                 <CardDescription>Select a symptom to get an AI-powered flare-up prediction for the next 1-3 days.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+                {!aiDataSharingEnabled && isPrivacyLoaded && (
+                    <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/10 p-4 text-sm text-muted-foreground">
+                        AI-powered predictions are currently unavailable because you have not enabled data sharing with trusted AI partners.
+                        <div className="pt-3">
+                            <Button variant="link" className="px-0" asChild>
+                                <Link href="/settings">Update privacy preferences</Link>
+                            </Button>
+                        </div>
+                    </div>
+                )}
                 <div className="flex gap-4">
-                    <Select value={targetSymptom} onValueChange={setTargetSymptom} disabled={isPredicting || isLoadingSymptoms}>
+                    <Select value={targetSymptom} onValueChange={setTargetSymptom} disabled={isPredicting || isLoadingSymptoms || !aiDataSharingEnabled}>
                         <SelectTrigger className="flex-1">
                             <SelectValue placeholder={isLoadingSymptoms ? 'Loading symptoms...' : 'Select a symptom...'} />
                         </SelectTrigger>
@@ -162,11 +182,11 @@ const SymptomPredictor = () => {
                             {symptoms.map(s => <SelectItem key={s.name} value={s.name}>{s.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    <Button onClick={handlePredict} disabled={!targetSymptom || isPredicting || isLoadingSymptoms}>
+                    <Button onClick={handlePredict} disabled={!targetSymptom || isPredicting || isLoadingSymptoms || !aiDataSharingEnabled}>
                         {isPredicting ? <Loader2 className="animate-spin" /> : 'Predict'}
                     </Button>
                 </div>
-                {prediction && (
+                {prediction && aiDataSharingEnabled && (
                     <div className="p-4 bg-black/20 rounded-lg space-y-2">
                         <h4 className="font-bold">{prediction.riskScore}% Risk of {targetSymptom}</h4>
                         <p className="text-sm text-muted-foreground">{prediction.predictionReasoning}</p>
@@ -251,19 +271,28 @@ export default function DashboardPage() {
   }, [firestore]);
   const { data: communityPosts, isLoading: arePostsLoading } = useCollection(postsQuery);
 
+  const sanitizedRecentSymptoms = useMemo(() => sanitizeSymptomLogs(recentSymptoms || []), [recentSymptoms]);
+  const sanitizedRecentMeals = useMemo(() => sanitizeNutritionLogs(recentMeals || []), [recentMeals]);
+  const sanitizedRecentWorkouts = useMemo(() => sanitizeWorkoutLogs(recentWorkouts || []), [recentWorkouts]);
+
+  const hasAiConsent = userProfile?.onboarding?.privacySettings?.ai_data_sharing === true;
+  const isPrivacyLoaded = Boolean(userProfile);
+  const shouldShowAiConsentMessage = isPrivacyLoaded && !hasAiConsent;
+
   useEffect(() => {
     const fetchCoachingTip = async () => {
         if (!userProfile) return;
-        
+
         setIsAiTipLoading(true);
         try {
             const cycleContext = cycleDay ? `Currently on day ${cycleDay} of her cycle.` : "No current cycle data available.";
             const context = {
                 pcosJourneyProgress: userProfile?.pcosJourneyProgress || 1,
-                recentSymptoms: JSON.stringify(recentSymptoms || []),
+                recentSymptoms: JSON.stringify(sanitizedRecentSymptoms),
                 cycleData: cycleContext,
-                nutritionData: JSON.stringify(recentMeals || []),
-                fitnessData: JSON.stringify(recentWorkouts || []),
+                nutritionData: JSON.stringify(sanitizedRecentMeals),
+                fitnessData: JSON.stringify(sanitizedRecentWorkouts),
+                labResultData: '[]',
                 userQuery: "What's one thing I can focus on today based on my recent data?",
             };
             const result = await generateCoachingTip(context);
@@ -275,9 +304,14 @@ export default function DashboardPage() {
         }
     };
     if(userProfile && cycleDay !== null && !areSymptomsLoading && !areMealsLoading && !areWorkoutsLoading) {
+        if (!hasAiConsent) {
+            setAiCoachingTip(null);
+            setIsAiTipLoading(false);
+            return;
+        }
         fetchCoachingTip();
     }
-  }, [userProfile, recentSymptoms, cycleDay, recentMeals, recentWorkouts, areSymptomsLoading, areMealsLoading, areWorkoutsLoading]);
+  }, [userProfile, cycleDay, sanitizedRecentSymptoms, sanitizedRecentMeals, sanitizedRecentWorkouts, hasAiConsent, areSymptomsLoading, areMealsLoading, areWorkoutsLoading]);
 
 
   const handleQuickLogSymptom = async (symptom: {name: string, bodyZone: string}) => {
@@ -377,7 +411,7 @@ export default function DashboardPage() {
         </Card>
       </div>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <SymptomPredictor />
+        <SymptomPredictor aiDataSharingEnabled={hasAiConsent} isPrivacyLoaded={isPrivacyLoaded} />
         <Card className="glass-card lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -386,14 +420,23 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {isAiTipLoading ? (
+            {shouldShowAiConsentMessage ? (
+                <div className="rounded-lg border border-dashed border-muted-foreground/40 bg-muted/10 p-4 text-sm text-muted-foreground">
+                    AI-powered coaching is paused because you have not consented to share anonymized data with our AI providers.
+                    <div className="pt-3">
+                        <Button variant="link" className="px-0" asChild>
+                            <Link href="/settings">Manage privacy controls</Link>
+                        </Button>
+                    </div>
+                </div>
+            ) : isAiTipLoading ? (
                  <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="animate-spin size-4"/>
                     <span>Generating your daily tip...</span>
                  </div>
             ) : (
                  <p className="font-accent text-lg italic text-muted-foreground">
-                    "{aiCoachingTip}"
+                    {aiCoachingTip ? `"${aiCoachingTip}"` : 'No tip available right now. Check back soon!'}
                 </p>
             )}
           </CardContent>
