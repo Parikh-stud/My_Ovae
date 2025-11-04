@@ -14,11 +14,11 @@ import {z} from 'genkit';
 
 const CoachingTipInputSchema = z.object({
   pcosJourneyProgress: z.number().describe("The user's progress (day number) in the 90-day PCOS journey."),
-  recentSymptoms: z.string().describe("A JSON string of the user's most recently logged symptoms."),
+  recentSymptoms: z.string().describe("A JSON string of aggregated, de-identified symptom summaries from the user's recent logs."),
   cycleData: z.string().describe("Information about the user's current menstrual cycle, including day and phase."),
-  nutritionData: z.string().describe("A JSON string of the user's recent meal logs."),
-  fitnessData: z.string().describe("A JSON string of the user's recent workout activities."),
-  labResultData: z.string().describe("A JSON string of the user's recent lab results."),
+  nutritionData: z.string().describe("A JSON string of anonymized nutrition summaries from the user's recent meal logs."),
+  fitnessData: z.string().describe("A JSON string of anonymized workout summaries from the user's recent activities."),
+  labResultData: z.string().describe("A JSON string of the user's recent lab results (de-identified if present)."),
   userQuery: z.string().describe('The specific question or topic the user is asking about.')
 });
 export type CoachingTipInput = z.infer<typeof CoachingTipInputSchema>;
@@ -55,9 +55,9 @@ Analyze the user's complete health snapshot below to generate a personalized coa
 CONTEXT:
 - PCOS Journey: Day {{{pcosJourneyProgress}}}
 - Cycle: {{{cycleData}}}
-- Recent Symptoms: {{{recentSymptoms}}}
-- Recent Meals: {{{nutritionData}}}
-- Recent Workouts: {{{fitnessData}}}
+- Recent Symptom Summaries: {{{recentSymptoms}}}
+- Recent Meal Summaries: {{{nutritionData}}}
+- Recent Workout Summaries: {{{fitnessData}}}
 - Recent Lab Results: {{{labResultData}}}
 
 Your concise and empathetic response as Ovie for the 'coachingTip' field:`,

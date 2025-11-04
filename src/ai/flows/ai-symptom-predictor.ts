@@ -12,7 +12,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SymptomPredictorInputSchema = z.object({
-  historicalData: z.string().describe('A summary of the user\'s recent health data, including symptoms, cycle day, nutrition logs, and fitness activities over the last 7-14 days.'),
+  historicalData: z.string().describe('A de-identified summary of the user\'s recent health data, including aggregated symptom trends over the last 7-14 days.'),
   targetSymptom: z.string().describe('The specific symptom for which a flare-up prediction is requested (e.g., "Fatigue", "Bloating").')
 });
 export type SymptomPredictorInput = z.infer<typeof SymptomPredictorInputSchema>;
@@ -36,7 +36,7 @@ const prompt = ai.definePrompt({
 
 Analyze the provided historical data for patterns. Consider how recent diet, exercise, cycle phase, and other logged symptoms might influence the target symptom.
 
-- Historical Data: {{{historicalData}}}
+- Aggregated Historical Data: {{{historicalData}}}
 - Symptom to Predict: {{{targetSymptom}}}
 
 Based on your analysis, provide a risk score (0-100), a brief reasoning based on the data, and one simple preventative action. For example, if you see high-sugar meals and the target symptom is 'Fatigue', you might predict a higher risk and suggest balancing blood sugar.`,
