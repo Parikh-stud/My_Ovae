@@ -1,229 +1,76 @@
 
-"use client";
+'use client';
 
-import {
-  Bot,
-  Carrot,
-  CircleUser,
-  Dumbbell,
-  HeartPulse,
-  LayoutDashboard,
-  LifeBuoy,
-  LogOut,
-  Moon,
-  NotebookText,
-  Settings,
-  Sun,
-  TrendingUp,
-  Users,
-} from "lucide-react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useEffect } from "react";
-import { AnimatePresence, m } from "framer-motion";
+import React, { Suspense } from 'react';
+import type { ReactNode } from 'react';
+import { AnimatePresence, m } from 'framer-motion';
+import { usePathname } from 'next/navigation';
+import { Header } from '@/components/navigation/Header';
+import { ErrorBoundary } from 'react-error-boundary';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Dock, dockItems } from '@/components/navigation/Dock';
 
-import { Logo } from "@/components/logo";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarProvider,
-  SidebarSeparator,
-  SidebarInset,
-} from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
-import { useAuth, useUser } from "@/firebase";
-import { useTheme } from "next-themes";
+const LoadingSkeleton = () => (
+    <div className="p-8">
+        <Skeleton className="h-10 w-1/4 mb-8" />
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-6">
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
+        </div>
+        <Skeleton className="h-64 w-full" />
+    </div>
+)
 
+const NavErrorFallback = ({ error }: { error: Error }) => (
+    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[1001] p-4 bg-destructive/80 text-destructive-foreground rounded-lg glass-card-auth">
+        <p className="text-center text-sm font-bold">Navigation failed to load.</p>
+    </div>
+);
 
-const menuItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/cycle-tracker", label: "Cycle Tracker", icon: Moon },
-  { href: "/symptom-log", label: "Symptom Log", icon: HeartPulse },
-  { href: "/insights", label: "Insights", icon: TrendingUp },
-  { href: "/coaching", label: "AI Coach", icon: Bot },
-  { href: "/community", label: "Sisterhood", icon: Users },
-  { href: "/nutrition", label: "Nutrition", icon: Carrot },
-  { href: "/fitness", label: "Fitness", icon: Dumbbell },
-  { href: "/lab-results", label: "Lab Results", icon: NotebookText },
-];
-
-const bottomMenuItems = [
-  { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/support", label: "Support", icon: LifeBuoy },
-];
+const HeaderErrorFallback = () => (
+    <div className="p-4 border-b border-destructive">
+        <p className="text-destructive text-center">Header failed to load.</p>
+    </div>
+);
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { user, isUserLoading } = useUser();
-  const auth = useAuth();
-  const router = useRouter();
-  const { theme, setTheme } = useTheme();
-
-  useEffect(() => {
-    if (user && (user as any).themePreference) {
-      setTheme((user as any).themePreference)
-    }
-  }, [user, setTheme])
-
-  if (isUserLoading) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center">
-        Loading...
-      </div>
-    );
-  }
-
-  if (!user) {
-    router.push("/login");
-    return null;
-  }
-
-  const handleLogout = () => {
-    auth.signOut();
-  };
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen max-h-screen">
-        <Sidebar
-          variant="inset"
-          collapsible="icon"
-          className="bg-transparent border-0"
-        >
-          <SidebarHeader className="p-4">
-            <Logo size="sm" />
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <Link href={item.href}>
-                    <SidebarMenuButton
-                      isActive={pathname.startsWith(item.href)}
-                      tooltip={{ children: item.label }}
-                    >
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarContent>
-          <SidebarSeparator />
-          <SidebarContent>
-            <SidebarMenu>
-              {bottomMenuItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <Link href={item.href}>
-                    <SidebarMenuButton
-                      isActive={pathname.startsWith(item.href)}
-                      tooltip={{ children: item.label }}
-                    >
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarContent>
-          <SidebarSeparator />
-          <SidebarFooter className="p-4">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div className="flex items-center gap-3 cursor-pointer p-2 rounded-md hover:bg-sidebar-accent transition-colors">
-                  <div className="relative">
-                    <Avatar className="size-9">
-                      <AvatarImage
-                        src={
-                          user.photoURL ||
-                          `https://picsum.photos/seed/${user.uid}/100/100`
-                        }
-                      />
-                      <AvatarFallback>
-                        {user.displayName?.charAt(0) || user.email?.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="absolute -bottom-0.5 -right-0.5 rounded-full ring-2 ring-sidebar-background bg-green-500 size-3" />
-                  </div>
-                  <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
-                    <p className="font-semibold text-sm truncate">
-                      {user.displayName || "User"}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {user.email}
-                    </p>
-                  </div>
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 mb-2" align="end">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <CircleUser className="mr-2" />
-                  <span>Profile</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <LifeBuoy className="mr-2" />
-                  <span>Support</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setTheme('light')} disabled={theme === 'light'}>
-                  <Sun className="mr-2" />
-                  <span>Light Mode</span>
-                </DropdownMenuItem>
-                 <DropdownMenuItem onClick={() => setTheme('dark')} disabled={theme === 'dark'}>
-                  <Moon className="mr-2" />
-                  <span>Dark Mode</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarFooter>
-        </Sidebar>
-
-        <SidebarInset
-          className={cn(
-            "bg-transparent min-h-screen transition-all duration-300 ease-in-out flex-1"
-          )}
-        >
-          <AnimatePresence mode="wait">
+    <div id="app-container" className="flex-1 flex flex-col overflow-hidden h-screen max-h-screen">
+        <ErrorBoundary FallbackComponent={HeaderErrorFallback}>
+            <Header />
+        </ErrorBoundary>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+            <AnimatePresence mode="wait">
             <m.div
-              key={pathname}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="h-full"
+                key={pathname}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="h-full"
             >
-              {children}
+                <Suspense fallback={<LoadingSkeleton />}>
+                {children}
+                </Suspense>
             </m.div>
-          </AnimatePresence>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
+        </AnimatePresence>
+        </main>
+        <ErrorBoundary FallbackComponent={NavErrorFallback}>
+            <Dock>
+                {dockItems.map((item) => (
+                <Dock.Item
+                    key={item.href}
+                    href={item.href}
+                    icon={item.icon}
+                    label={item.label}
+                />
+                ))}
+            </Dock>
+        </ErrorBoundary>
+    </div>
   );
 }

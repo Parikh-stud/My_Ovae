@@ -7,17 +7,15 @@ import { Calendar as CalendarIcon, Lightbulb, Loader2, Star, Trash2, Mic, Sparkl
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { format, startOfDay, endOfDay } from "date-fns";
+import { format, startOfDay, endOfDay, subDays } from "date-fns";
 import { useFirestore, useUser, useCollection, useMemoFirebase, addDocumentNonBlocking, deleteDocumentNonBlocking } from "@/firebase";
-import { collection, query, where, Timestamp, doc, orderBy, limit } from "firebase/firestore";
+import { collection, query, where, Timestamp, doc, orderBy } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatePresence, m } from "framer-motion";
 import { Textarea } from "@/components/ui/textarea";
 import { suggestSymptomsFromText, AISuggestSymptomsOutput } from "@/ai/flows/ai-suggested-symptoms";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 
@@ -92,49 +90,52 @@ const SymptomConstellation = ({ symptoms }: { symptoms: any[] }) => {
     );
 };
 
-const SymptomTimeline = ({ symptoms, isLoading, onDelete }: { symptoms: any[], isLoading: boolean, onDelete: (id: string) => void }) => (
-    <Card className="glass-card">
-        <CardHeader>
-            <CardTitle>Today's Timeline</CardTitle>
-        </CardHeader>
-        <CardContent>
-            <AnimatePresence>
-            {isLoading ? (
-                <div className="space-y-2">
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                </div>
-            ) : symptoms && symptoms.length > 0 ? (
-                 <div className="space-y-4">
-                    {symptoms.map((symptom) => (
-                        <m.div 
-                            key={symptom.id}
-                            layout
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, x: -50, transition: { duration: 0.2 } }}
-                            className="flex items-center gap-4 bg-black/20 p-3 rounded-lg"
-                        >
-                            <div className="text-lg">{symptom.symptomType === 'Cramps' ? '💢' : symptom.symptomType === 'Mood Swings' ? '🎭' : symptom.symptomType === 'Fatigue' ? '😴' : symptom.symptomType === 'Acne' ? '✨' : symptom.symptomType === 'Bloating' ? '🎈' : '🤕'}</div>
-                            <div className="flex-1">
-                                <p className="font-bold">{symptom.symptomType}</p>
-                                <p className="text-xs text-muted-foreground">Severity: {symptom.severity}/5</p>
-                            </div>
-                            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={() => onDelete(symptom.id)}>
-                                <Trash2 className="size-4" />
-                            </Button>
-                        </m.div>
-                    ))}
-                </div>
-            ) : (
-                <div className="h-40 flex items-center justify-center text-muted-foreground">
-                    <p>No symptoms logged for this date yet.</p>
-                </div>
-            )}
-            </AnimatePresence>
-        </CardContent>
-    </Card>
-);
+const SymptomTimeline = ({ symptoms, isLoading, onDelete }: { symptoms: any[], isLoading: boolean, onDelete: (id: string) => void }) => {
+    
+    return (
+        <Card className="glass-card">
+            <CardHeader>
+                <CardTitle>Today's Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <AnimatePresence>
+                {isLoading ? (
+                    <div className="space-y-2">
+                        <Skeleton className="h-16 w-full" />
+                        <Skeleton className="h-16 w-full" />
+                    </div>
+                ) : symptoms && symptoms.length > 0 ? (
+                     <div className="space-y-4">
+                        {symptoms.map((symptom) => (
+                            <m.div 
+                                key={symptom.id}
+                                layout
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, x: -50, transition: { duration: 0.2 } }}
+                                className="flex items-center gap-4 bg-black/20 p-3 rounded-lg"
+                            >
+                                <div className="text-lg">{symptom.symptomType === 'Cramps' ? '💢' : symptom.symptomType === 'Mood Swings' ? '🎭' : symptom.symptomType === 'Fatigue' ? '😴' : symptom.symptomType === 'Acne' ? '✨' : symptom.symptomType === 'Bloating' ? '🎈' : '🤕'}</div>
+                                <div className="flex-1">
+                                    <p className="font-bold">{symptom.symptomType}</p>
+                                    <p className="text-xs text-muted-foreground">Severity: {symptom.severity}/5</p>
+                                </div>
+                                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={() => onDelete(symptom.id)}>
+                                    <Trash2 className="size-4" />
+                                </Button>
+                            </m.div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="h-40 flex items-center justify-center text-muted-foreground">
+                        <p>No symptoms logged for this date yet.</p>
+                    </div>
+                )}
+                </AnimatePresence>
+            </CardContent>
+        </Card>
+    );
+};
 
 const symptomsList = [
   { name: 'Fatigue', severity: 3, bodyZone: 'General' },
@@ -145,25 +146,27 @@ const symptomsList = [
   { name: 'Headache', severity: 2, bodyZone: 'Head' },
 ];
 
-const SymptomQuickLog = ({ onLog }: { onLog: (symptom: any) => void }) => (
-    <Card className="glass-card">
-        <CardHeader>
-            <CardTitle>Quick Log</CardTitle>
-            <CardDescription>Tap to log a common symptom.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-            {symptomsList.map((symptom) => (
-                <Button 
-                    key={symptom.name}
-                    variant="outline"
-                    onClick={() => onLog(symptom)}
-                >
-                    {symptom.name}
-                </Button>
-            ))}
-        </CardContent>
-    </Card>
-);
+const SymptomQuickLog = ({ onLog }: { onLog: (symptom: any) => void }) => {
+    return (
+        <Card className="glass-card">
+            <CardHeader>
+                <CardTitle>Quick Log</CardTitle>
+                <CardDescription>Tap to log a common symptom.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+                {symptomsList.map((symptom) => (
+                    <Button 
+                        key={symptom.name}
+                        variant="outline"
+                        onClick={() => onLog(symptom)}
+                    >
+                        {symptom.name}
+                    </Button>
+                ))}
+            </CardContent>
+        </Card>
+    );
+};
 
 const DateSelector = ({ date, setDate }: { date: Date | undefined, setDate: (date: Date | undefined) => void }) => {
     return (
@@ -190,76 +193,84 @@ const DateSelector = ({ date, setDate }: { date: Date | undefined, setDate: (dat
     )
 }
 
-const AISymptomLogger = ({ onLog }: { onLog: (symptom: any) => void }) => {
+const AISymptomLogger = ({ onLog, symptomHistory }: { onLog: (symptom: any) => void, symptomHistory: any[] }) => {
     const [text, setText] = useState('');
-    const [transcript, setTranscript] = useState('');
     const [suggestions, setSuggestions] = useState<AISuggestSymptomsOutput['suggestions']>([]);
     const [isSuggesting, setIsSuggesting] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
     const { toast } = useToast();
-
-    useEffect(() => {
-        if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognitionRef.current = new SpeechRecognition();
-            recognitionRef.current.continuous = false;
-            recognitionRef.current.interimResults = false;
-            recognitionRef.current.lang = 'en-US';
-
-            recognitionRef.current.onresult = (event: any) => {
-                const currentTranscript = event.results[0][0].transcript;
-                setTranscript(currentTranscript);
-            };
-            recognitionRef.current.onerror = (event: any) => {
-                toast({ variant: 'destructive', title: 'Voice Error', description: `Error occurred in recognition: ${event.error}` });
-                setIsListening(false);
-            };
-             recognitionRef.current.onend = () => {
-                setIsListening(false);
-            };
-        }
-    }, [toast]);
     
     useEffect(() => {
-        if (transcript) {
-            setText(transcript);
-            handleSuggest(transcript);
+        // SpeechRecognition is client-side only
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognitionRef.current = new SpeechRecognition();
+            recognitionRef.current.continuous = false;
+            recognitionRef.current.interimResults = true;
+
+            recognitionRef.current.onresult = (event: any) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                setText(prev => prev + finalTranscript + interimTranscript);
+            };
+            
+            recognitionRef.current.onerror = (event: any) => {
+                 toast({ variant: 'destructive', title: 'Speech Recognition Error', description: event.error });
+                 setIsListening(false);
+            };
+            
+            recognitionRef.current.onend = () => {
+                setIsListening(false);
+                if (text.trim()) {
+                    handleSuggest(text);
+                }
+            };
+
         }
-    }, [transcript]);
+    }, [toast, text]);
 
+    const toggleListening = () => {
+        if (!recognitionRef.current) {
+            toast({ variant: 'destructive', title: 'Unsupported', description: 'Speech recognition is not supported in this browser.' });
+            return;
+        }
 
-    const handleSuggest = async (inputText = text) => {
+        if (isListening) {
+            recognitionRef.current.stop();
+        } else {
+            setText(''); // Clear text before starting new recognition
+            setSuggestions([]);
+            recognitionRef.current.start();
+        }
+        setIsListening(!isListening);
+    };
+    
+    const handleSuggest = useCallback(async (inputText = text) => {
         if (!inputText.trim()) return;
         setIsSuggesting(true);
         setSuggestions([]);
         try {
-            const result = await suggestSymptomsFromText({ text: inputText });
+            const result = await suggestSymptomsFromText({ 
+                text: inputText,
+                symptomHistory: JSON.stringify(symptomHistory),
+             });
             setSuggestions(result.suggestions);
         } catch (error) {
             toast({ variant: 'destructive', title: 'AI Error', description: 'Could not get suggestions.' });
         } finally {
             setIsSuggesting(false);
         }
-    };
-    
-    const handleVoiceInput = () => {
-        if (!recognitionRef.current) {
-            toast({ variant: 'destructive', title: 'Unsupported', description: 'Voice input is not supported in your browser.' });
-            return;
-        }
-        if (isListening) {
-            recognitionRef.current.stop();
-        } else {
-            setText('');
-            setTranscript('');
-            setSuggestions([]);
-            recognitionRef.current.start();
-            setIsListening(true);
-        }
-    };
+    }, [text, toast, symptomHistory]);
 
-    const handleLogSuggestion = (suggestion: any) => {
+    const handleLogSuggestion = useCallback((suggestion: any) => {
         onLog({
             name: suggestion.symptomType,
             severity: suggestion.severity,
@@ -267,40 +278,46 @@ const AISymptomLogger = ({ onLog }: { onLog: (symptom: any) => void }) => {
         });
         // Remove the logged suggestion from the list
         setSuggestions(prev => prev.filter(s => s.symptomType !== suggestion.symptomType));
-    };
+    }, [onLog]);
+
+    const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setText(e.target.value);
+    }, []);
 
     return (
         <Card className="glass-card">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2"><Lightbulb className="text-primary"/> AI Symptom Helper</CardTitle>
-                <CardDescription>Describe how you feel, and let AI suggest symptoms to log. You can also use the microphone.</CardDescription>
+                <CardDescription>Describe how you feel, and let AI suggest symptoms to log.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="relative">
                     <Textarea 
                         placeholder="e.g., 'I have a terrible headache and feel really bloated...'"
                         value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        className="bg-background/50 pr-20"
+                        onChange={handleTextChange}
+                        className="bg-background/50 pr-24"
                         disabled={isSuggesting || isListening}
                     />
-                     <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className={cn("absolute top-2 right-10", isListening && "text-primary animate-pulse")} 
-                        onClick={handleVoiceInput}
-                        disabled={isSuggesting}
-                    >
-                        <Mic />
-                    </Button>
-                    <Button 
-                        size="icon" 
-                        className="absolute top-2 right-2" 
-                        onClick={() => handleSuggest()}
-                        disabled={isSuggesting || isListening || !text.trim()}
-                    >
-                       {isSuggesting ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                    </Button>
+                    <div className="absolute top-2 right-2 flex flex-col gap-2">
+                         <Button 
+                            size="icon"
+                            variant={isListening ? 'destructive' : 'outline'}
+                            onClick={toggleListening}
+                            disabled={isSuggesting}
+                            aria-label={isListening ? "Stop listening" : "Start listening"}
+                        >
+                           <Mic className={cn(isListening && "animate-pulse")}/>
+                        </Button>
+                        <Button 
+                            size="icon" 
+                            onClick={() => handleSuggest()}
+                            disabled={isSuggesting || !text.trim()}
+                            aria-label="Get AI suggestions"
+                        >
+                           {isSuggesting ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                        </Button>
+                    </div>
                 </div>
                  {suggestions.length > 0 && (
                     <div className="flex flex-wrap gap-2">
@@ -345,6 +362,18 @@ export default function SymptomLogPage() {
     }, [user, date, firestore]);
     
     const { data: symptoms, isLoading } = useCollection(symptomsQuery);
+
+    const symptomHistoryQuery = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        const sevenDaysAgo = subDays(new Date(), 7);
+        return query(
+            collection(firestore, 'users', user.uid, 'symptomLogs'),
+            where('timestamp', '>=', Timestamp.fromDate(sevenDaysAgo)),
+            orderBy('timestamp', 'desc')
+        );
+    }, [user, firestore]);
+
+    const { data: symptomHistory } = useCollection(symptomHistoryQuery);
     
     const handleLogSymptom = useCallback(async (symptomData: any) => {
         if (!user || !firestore) {
@@ -396,11 +425,15 @@ export default function SymptomLogPage() {
         }
     }, [user, firestore, toast]);
 
+    const handleDateChange = useCallback((newDate: Date | undefined) => {
+        setDate(newDate);
+    }, []);
+
     return (
         <div className="p-4 md:p-8 space-y-4">
             <header className="flex justify-between items-center">
                 <h1 className="text-3xl font-headline font-bold text-gradient">Symptom Tracking</h1>
-                <DateSelector date={date} setDate={setDate} />
+                <DateSelector date={date} setDate={handleDateChange} />
             </header>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -409,7 +442,7 @@ export default function SymptomLogPage() {
                 </main>
 
                 <aside className="space-y-6">
-                    <AISymptomLogger onLog={handleLogSymptom} />
+                    <AISymptomLogger onLog={handleLogSymptom} symptomHistory={symptomHistory || []} />
                     <SymptomQuickLog onLog={handleLogSymptom} />
                     <SymptomTimeline symptoms={symptoms || []} isLoading={isLoading} onDelete={handleDeleteSymptom} />
                 </aside>

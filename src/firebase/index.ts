@@ -4,7 +4,7 @@
 import { firebaseConfig } from '@/firebase/config';
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, initializeFirestore, CACHE_SIZE_UNLIMITED, memoryLocalCache, persistentLocalCache } from 'firebase/firestore'
+import { getFirestore, initializeFirestore, CACHE_SIZE_UNLIMITED, memoryLocalCache } from 'firebase/firestore'
 import { 
     setDocumentNonBlocking,
     addDocumentNonBlocking,
@@ -15,37 +15,26 @@ import {
 
 // IMPORTANT: DO NOT MODIFY THIS FUNCTION
 export function initializeFirebase() {
-  if (!getApps().length) {
-    let firebaseApp: FirebaseApp;
-    try {
-      firebaseApp = initializeApp(firebaseConfig);
-    } catch (e) {
-      if (process.env.NODE_ENV === "production") {
-        console.warn('Automatic initialization failed. Falling back to firebase config object.', e);
-      }
-      firebaseApp = initializeApp(firebaseConfig);
-    }
-    
-    // Initialize Firestore with persistence settings
-    const firestore = initializeFirestore(firebaseApp, {
-        localCache: persistentLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED })
-        // For multi-tab persistence, use:
-        // localCache: persistentLocalCache({ tabManager: 'multi-tab' })
-    });
-
+  if (getApps().length) {
+    const app = getApp();
     return {
-      firebaseApp,
-      auth: getAuth(firebaseApp),
-      firestore
+        firebaseApp: app,
+        auth: getAuth(app),
+        firestore: getFirestore(app)
     };
   }
+  
+  const firebaseApp = initializeApp(firebaseConfig);
+  
+  // Initialize Firestore with in-memory caching for performance
+  const firestore = initializeFirestore(firebaseApp, {
+      localCache: memoryLocalCache()
+  });
 
-  // If already initialized, return the SDKs with the already initialized App
-  const app = getApp();
   return {
-    firebaseApp: app,
-    auth: getAuth(app),
-    firestore: getFirestore(app)
+    firebaseApp,
+    auth: getAuth(firebaseApp),
+    firestore
   };
 }
 

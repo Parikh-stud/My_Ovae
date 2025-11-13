@@ -2,22 +2,25 @@
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, FileText, BrainCircuit, Target, CalendarHeart, CalendarClock, LineChart, Loader2, Sparkles } from "lucide-react";
+import { TrendingUp, FileText, BrainCircuit, Target, CalendarHeart, CalendarClock, LineChart, Loader2, Sparkles, HelpCircle, BookUser, Pill, Radar } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, query, orderBy, where, Timestamp, limit } from "firebase/firestore";
+import { useUser, useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from "@/firebase";
+import { collection, query, orderBy, where, Timestamp, limit } from 'firebase/firestore';
 import { useUserProfile } from "@/hooks/use-user-profile";
-import { useMemo, useState, useEffect } from "react";
-import { addDays, differenceInDays, format, isFuture, subDays } from 'date-fns';
+import { useMemo, useState, useEffect, useCallback } from "react";
+import { addDays, differenceInDays, format, isFuture, subDays, parseISO } from 'date-fns';
 import { generateCoachingTip } from "@/ai/flows/ai-generated-coaching";
 import { identifyPcosSubtype, PcosSubtypeOutput } from "@/ai/flows/ai-pcos-subtype-identifier";
+import { predictCycleEvents, CyclePredictorOutput } from "@/ai/flows/ai-cycle-predictor";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis, Area, AreaChart } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis, Area, AreaChart, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar as RechartsRadar } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { m } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
+import { useUserHealthData } from "@/hooks/use-user-health-data";
+import { Progress } from "@/components/ui/progress";
 
 const HealthScoreDashboard = () => {
     const { userProfile, isLoading } = useUserProfile();
@@ -72,7 +75,7 @@ const HealthScoreDashboard = () => {
     );
 };
 
-const PredictionCard = ({ icon: Icon, title, date, daysAway, color }: { icon: React.ElementType, title: string, date: Date | null, daysAway: number, color: string }) => {
+const PredictionCard = ({ icon: Icon, title, date, endDate, daysAway, color }: { icon: React.ElementType, title: string, date: Date | null, endDate?: Date | null, daysAway: number, color: string }) => {
     if (!date || !isFuture(date)) {
         return (
              <div className="flex items-center gap-4 text-muted-foreground p-3 rounded-lg bg-muted/50">
@@ -87,6 +90,8 @@ const PredictionCard = ({ icon: Icon, title, date, daysAway, color }: { icon: Re
         )
     }
 
+    const dateText = endDate ? `${format(date, 'MMM do')} - ${format(endDate, 'do')}` : format(date, 'MMMM do');
+
     return (
         <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
             <div className={cn("p-3 rounded-full", color)}>
@@ -94,46 +99,62 @@ const PredictionCard = ({ icon: Icon, title, date, daysAway, color }: { icon: Re
             </div>
             <div>
                 <h4 className="font-bold">{title}</h4>
-                <p className="text-sm text-muted-foreground">{format(date, 'MMMM do')} • <span className="font-semibold">{daysAway} days away</span></p>
+                <p className="text-sm text-muted-foreground">{dateText} • <span className="font-semibold">{daysAway} days away</span></p>
             </div>
         </div>
     )
 }
 
 const CyclePredictionEngine = () => {
+    const { cycles, areCyclesLoading, recentSymptoms, recentMeals } = useUserHealthData();
+    const [isPredicting, setIsPredicting] = useState(false);
+    const [prediction, setPrediction] = useState<CyclePredictorOutput | null>(null);
+    const { toast } = useToast();
     const { user } = useUser();
     const firestore = useFirestore();
-    const cyclesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'cycles'), orderBy('startDate', 'desc'), limit(6));
-    }, [user, firestore]);
-    const { data: cycles, isLoading } = useCollection(cyclesQuery);
 
-    const predictions = useMemo(() => {
-        if (!cycles || cycles.length < 2) return null;
-
-        const completedCycles = cycles.slice(1).filter(c => c.length && typeof c.length === 'number');
-        if (completedCycles.length === 0) return null;
-
-        const avgCycleLength = Math.round(completedCycles.reduce((sum, c) => sum + c.length, 0) / completedCycles.length);
-        if(isNaN(avgCycleLength)) return null;
-
-        const lastCycle = cycles[0];
-        const lastStartDate = (lastCycle.startDate as any)?.toDate();
-        if(!lastStartDate) return null;
-
-        const nextPeriodStart = addDays(lastStartDate, avgCycleLength);
-        const ovulationDay = Math.round(avgCycleLength - 14);
-        const nextOvulationDate = addDays(lastStartDate, ovulationDay);
-        const fertileWindowStart = addDays(nextOvulationDate, -5);
-
-        const now = new Date();
-        return {
-            nextPeriod: { date: nextPeriodStart, daysAway: differenceInDays(nextPeriodStart, now) },
-            nextOvulation: { date: nextOvulationDate, daysAway: differenceInDays(nextOvulationDate, now) },
-            fertileWindow: { date: fertileWindowStart, daysAway: differenceInDays(fertileWindowStart, now) }
+    const handlePredict = useCallback(async () => {
+        if (!cycles || cycles.length < 2) {
+            toast({
+                variant: 'destructive',
+                title: 'Not Enough Data',
+                description: 'Please log at least two full cycles to generate an AI forecast.',
+            });
+            return;
         }
-    }, [cycles]);
+        if (!user || !firestore) return;
+        
+        setIsPredicting(true);
+        try {
+            const result = await predictCycleEvents({
+                historicalCycleData: JSON.stringify(cycles),
+                recentSymptomData: JSON.stringify(recentSymptoms || []),
+                recentMoodData: JSON.stringify([]), // Placeholder for mood data
+                recentNutritionData: JSON.stringify(recentMeals || []),
+            });
+            setPrediction(result);
+
+            const predictionLogRef = collection(firestore, 'users', user.uid, 'cyclePredictions');
+            addDocumentNonBlocking(predictionLogRef, {
+                userId: user.uid,
+                predictionDate: new Date(),
+                confidenceScore: result.confidenceScore,
+                reasoning: result.reasoning,
+                predictedPeriodStartDate: result.nextPeriodStartDate,
+            });
+
+        } catch (error) {
+            toast({
+                variant: 'destructive',
+                title: 'Prediction Failed',
+                description: 'The AI could not generate a forecast at this time.',
+            });
+        } finally {
+            setIsPredicting(false);
+        }
+    }, [cycles, recentSymptoms, recentMeals, toast, user, firestore]);
+
+    const now = new Date();
 
     return (
         <Card className="glass-card">
@@ -142,45 +163,41 @@ const CyclePredictionEngine = () => {
                 <CardDescription>AI-powered cycle forecasting.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                 {isLoading ? (
-                    <>
-                        <Skeleton className="h-16 w-full" />
-                        <Skeleton className="h-16 w-full" />
-                        <Skeleton className="h-16 w-full" />
-                    </>
-                ) : (
-                    <>
-                        <PredictionCard icon={CalendarClock} title="Next Period" date={predictions?.nextPeriod.date || null} daysAway={predictions?.nextPeriod.daysAway || 0} color="bg-cycle-menstrual/20 text-cycle-menstrual" />
-                        <PredictionCard icon={CalendarHeart} title="Fertile Window" date={predictions?.fertileWindow.date || null} daysAway={predictions?.fertileWindow.daysAway || 0} color="bg-cycle-follicular/20 text-cycle-follicular" />
-                        <PredictionCard icon={Target} title="Ovulation Day" date={predictions?.nextOvulation.date || null} daysAway={predictions?.nextOvulation.daysAway || 0} color="bg-cycle-ovulation/20 text-cycle-ovulation" />
-                    </>
+                 <Button onClick={handlePredict} disabled={isPredicting || areCyclesLoading}>
+                    {isPredicting ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                    {prediction ? 'Regenerate AI Forecast' : 'Generate AI Forecast'}
+                 </Button>
+
+                 {prediction ? (
+                     <m.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-4 pt-4"
+                    >
+                         <PredictionCard icon={CalendarClock} title="Next Period" date={parseISO(prediction.nextPeriodStartDate)} endDate={parseISO(prediction.nextPeriodEndDate)} daysAway={differenceInDays(parseISO(prediction.nextPeriodStartDate), now)} color="bg-cycle-menstrual/20 text-cycle-menstrual" />
+                         <PredictionCard icon={CalendarHeart} title="Fertile Window" date={parseISO(prediction.fertileWindowStartDate)} daysAway={differenceInDays(parseISO(prediction.fertileWindowStartDate), now)} color="bg-cycle-follicular/20 text-cycle-follicular" />
+                         <PredictionCard icon={Target} title="Ovulation Day" date={parseISO(prediction.ovulationDate)} daysAway={differenceInDays(parseISO(prediction.ovulationDate), now)} color="bg-cycle-ovulation/20 text-cycle-ovulation" />
+                        <div className="p-3 bg-black/20 rounded-lg space-y-2">
+                            <div className="flex justify-between items-center">
+                                <p className="text-sm font-bold uppercase text-primary">AI Reasoning</p>
+                                <Badge variant="outline">Confidence: {prediction.confidenceScore}%</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{prediction.reasoning}</p>
+                        </div>
+                     </m.div>
+                 ) : (
+                     <div className="h-40 flex items-center justify-center text-center text-muted-foreground">
+                        <p>Click the button to get a sophisticated forecast based on your cycle and symptom history.</p>
+                    </div>
                  )}
+
             </CardContent>
         </Card>
     );
 };
 
 const SymptomCorrelationMatrix = () => {
-    const { user } = useUser();
-    const firestore = useFirestore();
-    
-    const symptomsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        const oneYearAgo = subDays(new Date(), 365);
-        return query(
-            collection(firestore, 'users', user.uid, 'symptomLogs'),
-            where('timestamp', '>=', Timestamp.fromDate(oneYearAgo)),
-            orderBy('timestamp', 'desc')
-        );
-    }, [user, firestore]);
-    const { data: symptoms, isLoading: symptomsLoading } = useCollection(symptomsQuery);
-
-    const cyclesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        const oneYearAgo = subDays(new Date(), 365);
-        return query(collection(firestore, 'users', user.uid, 'cycles'), where('startDate', '>=', Timestamp.fromDate(oneYearAgo)), orderBy('startDate', 'asc'));
-    }, [user, firestore]);
-    const { data: cycles, isLoading: cyclesLoading } = useCollection(cyclesQuery);
+    const { recentSymptoms: symptoms, areSymptomsLoading, cycles, areCyclesLoading } = useUserHealthData(365, true);
 
     const chartData = useMemo(() => {
         if (!symptoms || !cycles || cycles.length === 0) return [];
@@ -218,7 +235,7 @@ const SymptomCorrelationMatrix = () => {
                 <CardDescription>Discover how your symptoms relate to your cycle day (last 365 days).</CardDescription>
             </CardHeader>
             <CardContent>
-                {(symptomsLoading || cyclesLoading) ? <Skeleton className="h-80 w-full" /> : chartData.length > 0 ? (
+                {(areSymptomsLoading || areCyclesLoading) ? <Skeleton className="h-80 w-full" /> : chartData.length > 0 ? (
                     <ChartContainer config={chartConfig} className="h-80 w-full">
                          <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: -10 }}>
                             <CartesianGrid strokeDasharray="3 3" />
@@ -239,36 +256,81 @@ const SymptomCorrelationMatrix = () => {
     );
 };
 
+const PcosPhenotypeMap = ({ scores }: { scores: PcosSubtypeOutput['phenotypeScores'] | null }) => {
+    const chartData = useMemo(() => {
+        if (!scores) return [];
+        return [
+            { subject: 'Insulin Resistance', score: scores.insulinResistance, fullMark: 100 },
+            { subject: 'Inflammation', score: scores.inflammation, fullMark: 100 },
+            { subject: 'Adrenal', score: scores.adrenal, fullMark: 100 },
+            { subject: 'Hormonal', score: scores.hormonalImbalance, fullMark: 100 },
+        ];
+    }, [scores]);
+
+    const chartConfig = {
+        score: { label: 'Score', color: 'hsl(var(--primary))' },
+    };
+
+    return (
+         <Card className="glass-card">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Radar /> Phenotype Map</CardTitle>
+                <CardDescription>A visual snapshot of your PCOS drivers.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                 {scores ? (
+                     <ChartContainer config={chartConfig} className="mx-auto w-full aspect-square h-80">
+                         <RadarChart data={chartData}>
+                             <defs>
+                                 <radialGradient id="radarFill">
+                                     <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                                     <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.1} />
+                                 </radialGradient>
+                             </defs>
+                             <CartesianGrid gridType="circle" />
+                             <PolarGrid />
+                             <PolarAngleAxis dataKey="subject" />
+                             <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                             <Tooltip content={<ChartTooltipContent />} />
+                             <RechartsRadar name="Phenotype" dataKey="score" stroke="hsl(var(--primary))" fill="url(#radarFill)" fillOpacity={0.6} />
+                         </RadarChart>
+                     </ChartContainer>
+                 ) : (
+                     <div className="h-80 flex items-center justify-center text-muted-foreground">
+                         <p>Analyze your data to generate the map.</p>
+                     </div>
+                 )}
+            </CardContent>
+        </Card>
+    )
+}
+
 const PcosSubtypeIdentifier = () => {
-    const { user } = useUser();
-    const firestore = useFirestore();
     const { toast } = useToast();
     const [isLoading, setIsLoading] = useState(false);
     const [result, setResult] = useState<PcosSubtypeOutput | null>(null);
+    const CONFIDENCE_THRESHOLD = 50;
 
-    const symptomsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/symptomLogs`), orderBy('timestamp', 'desc'), limit(50));
-    }, [user, firestore]);
-    const { data: symptoms, isLoading: symptomsLoading } = useCollection(symptomsQuery);
-    
-    const cyclesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'cycles'), orderBy('startDate', 'desc'), limit(6));
-    }, [user, firestore]);
-    const { data: cycles, isLoading: cyclesLoading } = useCollection(cyclesQuery);
+    const { user } = useUser();
+    const firestore = useFirestore();
 
-    const labResultsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'labResults'), orderBy('testDate', 'desc'), limit(1));
-    }, [user, firestore]);
-    const { data: labResults, isLoading: labResultsLoading } = useCollection(labResultsQuery);
+    const {
+        recentSymptoms: symptoms,
+        areSymptomsLoading,
+        cycles,
+        areCyclesLoading,
+        recentLabResults: labResults,
+        areLabResultsLoading
+    } = useUserHealthData(50);
+
 
     const handleIdentifySubtype = async () => {
         if ((!symptoms || symptoms.length === 0) && (!cycles || cycles.length === 0)) {
-            toast({ variant: 'destructive', title: "Not Enough Data", description: "Please log some symptoms and cycles to use this feature." });
+            toast({ variant: "destructive", title: "Not Enough Data", description: "Please log some symptoms and cycles to use this feature." });
             return;
         }
+        if (!user || !firestore) return;
+
         setIsLoading(true);
         setResult(null);
 
@@ -293,46 +355,93 @@ const PcosSubtypeIdentifier = () => {
         try {
             const analysisResult = await identifyPcosSubtype({ symptomSummary, cycleSummary, labResultSummary });
             setResult(analysisResult);
+
+            const analysisLogRef = collection(firestore, 'users', user.uid, 'subtypeAnalyses');
+            await addDocumentNonBlocking(analysisLogRef, {
+                userId: user.uid,
+                analysisDate: new Date(),
+                confidenceScore: analysisResult.confidenceScore,
+                phenotypeScores: analysisResult.phenotypeScores
+            });
+
         } catch (error) {
-            toast({ variant: 'destructive', title: "AI Error", description: "Could not identify subtype. Please try again." });
+            toast({ variant: "destructive", title: "AI Error", description: "Could not identify subtype. Please try again." });
         } finally {
             setIsLoading(false);
         }
     }
     
     const canAnalyze = (symptoms && symptoms.length > 0) || (cycles && cycles.length > 0);
+    const topSubtype = useMemo(() => {
+        if (!result || !result.phenotypeScores) return null;
+        // Find the key with the highest score
+        const scores = result.phenotypeScores;
+        const top = Object.entries(scores).reduce((a, b) => a[1] > b[1] ? a : b);
+        return {
+            name: top[0].charAt(0).toUpperCase() + top[0].slice(1),
+            score: top[1]
+        }
+    }, [result]);
 
     return (
-        <Card className="glass-card lg:col-span-2">
+         <Card className="glass-card lg:col-span-2">
              <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-gradient"><Sparkles /> PCOS Subtype Discovery</CardTitle>
-                <CardDescription>Understand your potential PCOS subtype based on your logged data. This is not a medical diagnosis.</CardDescription>
+                <CardDescription>Understand your potential PCOS drivers based on your logged data. This is not a medical diagnosis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <Button onClick={handleIdentifySubtype} disabled={isLoading || symptomsLoading || cyclesLoading || labResultsLoading || !canAnalyze}>
+                <Button onClick={handleIdentifySubtype} disabled={isLoading || areSymptomsLoading || areCyclesLoading || areLabResultsLoading || !canAnalyze}>
                     {isLoading ? <Loader2 className="animate-spin" /> : "Analyze My Data"}
                 </Button>
                 
+                <AnimatePresence>
                 {result && (
-                    <m.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="space-y-4 pt-4">
-                        <div>
-                            <p className="text-sm font-bold uppercase text-primary">Potential Subtype</p>
-                            <h3 className="text-2xl font-bold font-headline">{result.pcosSubtype}</h3>
-                        </div>
-                         <div>
-                            <p className="text-sm font-bold uppercase text-secondary">What This Means</p>
-                            <p className="text-muted-foreground">{result.subtypeDescription}</p>
-                        </div>
-                        <div>
-                            <p className="text-sm font-bold uppercase text-chart-4">Recommendations</p>
-                            <p className="text-muted-foreground">{result.recommendations}</p>
-                        </div>
-                         <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-                           <p className="font-bold">Disclaimer</p>
-                           <p>{result.disclaimer}</p>
-                        </div>
+                    <m.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} className="space-y-6 pt-4">
+                        {result.confidenceScore < CONFIDENCE_THRESHOLD ? (
+                             <div className="flex items-center gap-4 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500">
+                                <HelpCircle />
+                                <div>
+                                    <h4 className="font-bold">Low Confidence Analysis</h4>
+                                    <p className="text-sm">The AI has low confidence ({result.confidenceScore}%) in this analysis due to limited data. Log more symptoms, cycles, and lab results for a more accurate assessment.</p>
+                                </div>
+                            </div>
+                        ) : topSubtype ? (
+                            <>
+                                <div className="space-y-4">
+                                    <div>
+                                        <div className="flex justify-between items-baseline">
+                                            <p className="text-sm font-bold uppercase text-primary">Primary Driver</p>
+                                            <Badge variant="outline">Confidence: {result.confidenceScore}%</Badge>
+                                        </div>
+                                        <h3 className="text-2xl font-bold font-headline">{topSubtype.name.replace(/([A-Z])/g, ' $1').trim()}</h3>
+                                    </div>
+                                </div>
+                                <PcosPhenotypeMap scores={result.phenotypeScores} />
+
+                                <div>
+                                    <p className="text-sm font-bold uppercase text-secondary flex items-center gap-2"><BookUser /> What This Means</p>
+                                    <p className="text-muted-foreground mt-1">{result.explanation}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold uppercase text-chart-4 flex items-center gap-2"><Pill /> Educational Supplement Ideas</p>
+                                     <div className="mt-2 space-y-2">
+                                        {result.supplementSuggestions.map((sup, i) => (
+                                            <div key={i} className="p-3 rounded-md bg-black/20">
+                                                <p className="font-semibold">{sup.name}</p>
+                                                <p className="text-xs text-muted-foreground">{sup.reason}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+                                <p className="font-bold">Disclaimer</p>
+                                <p>{result.disclaimer}</p>
+                                </div>
+                            </>
+                        ) : null}
                     </m.div>
                 )}
+                </AnimatePresence>
             </CardContent>
         </Card>
     );
@@ -340,67 +449,35 @@ const PcosSubtypeIdentifier = () => {
 
 
 const AIGeneratedInsights = () => {
-    const { user } = useUser();
-    const firestore = useFirestore();
     const { userProfile, isLoading: isProfileLoading } = useUserProfile();
     const [aiInsight, setAiInsight] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const { toast } = useToast();
+    const { user } = useUser();
 
-    const symptomsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/symptomLogs`), orderBy('timestamp', 'desc'), limit(15));
-    }, [user, firestore]);
-    const { data: recentSymptoms, isLoading: areSymptomsLoading } = useCollection(symptomsQuery);
-
-    const nutritionQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/nutritionLogs`), orderBy('loggedAt', 'desc'), limit(5));
-    }, [user, firestore]);
-    const { data: recentMeals, isLoading: areMealsLoading } = useCollection(nutritionQuery);
-
-    const fitnessQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/fitnessActivities`), orderBy('completedAt', 'desc'), limit(5));
-    }, [user, firestore]);
-    const { data: recentWorkouts, isLoading: areWorkoutsLoading } = useCollection(fitnessQuery);
-
-    const cyclesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'cycles'), orderBy('startDate', 'desc'), limit(1));
-      }, [user, firestore]);
-    const { data: cyclesData, isLoading: areCyclesLoading } = useCollection(cyclesQuery);
-
-    const labResultsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/labResults`), orderBy('testDate', 'desc'), limit(3));
-    }, [user, firestore]);
-    const { data: recentLabResults, isLoading: areLabResultsLoading } = useCollection(labResultsQuery);
+    const {
+        cycleDay,
+        areSymptomsLoading,
+        areMealsLoading,
+        areFitnessActivitiesLoading,
+        areLabResultsLoading,
+        areCyclesLoading
+    } = useUserHealthData();
     
-    const latestCycle = useMemo(() => cyclesData?.[0], [cyclesData]);
-    const cycleDay = useMemo(() => {
-        if (latestCycle?.startDate) {
-          const start = (latestCycle.startDate as any).toDate();
-          const day = differenceInDays(new Date(), start) + 1;
-          return day > 0 ? day : 1;
-        }
-        return null;
-    }, [latestCycle]);
 
     useEffect(() => {
         const fetchInsight = async () => {
-            if (!userProfile) return;
+            if (!userProfile || !user) return;
             setIsLoading(true);
             try {
-                const cycleContext = cycleDay ? `Currently on day ${cycleDay} of her cycle.` : "No current cycle data available.";
                 const context = {
-                    pcosJourneyProgress: userProfile?.pcosJourneyProgress || 1,
-                    recentSymptoms: JSON.stringify(recentSymptoms || []),
-                    cycleData: cycleContext,
-                    nutritionData: JSON.stringify(recentMeals || []),
-                    fitnessData: JSON.stringify(recentWorkouts || []),
-                    labResultData: JSON.stringify(recentLabResults || []),
+                    userId: user.uid,
                     userQuery: "Based on all my recent data (symptoms, cycle, food, workouts, labs), what is one deep insight or pattern you notice? Give me a weekly summary.",
+                    userProfile: {
+                        wellnessGoal: userProfile.wellnessGoal || 'General Health',
+                        pcosJourneyProgress: userProfile.pcosJourneyProgress || 1,
+                    },
+                    conversationHistory: userProfile.conversationHistory || [],
                 };
                 const result = await generateCoachingTip(context);
                 setAiInsight(result.coachingTip);
@@ -416,10 +493,10 @@ const AIGeneratedInsights = () => {
             }
         };
 
-        if(!isProfileLoading && !areSymptomsLoading && !areCyclesLoading && !areMealsLoading && !areWorkoutsLoading && !areLabResultsLoading) {
+        if(!isProfileLoading && !areSymptomsLoading && !areCyclesLoading && !areMealsLoading && !areFitnessActivitiesLoading && !areLabResultsLoading) {
             fetchInsight();
         }
-    }, [userProfile, recentSymptoms, cycleDay, recentMeals, recentWorkouts, recentLabResults, isProfileLoading, areSymptomsLoading, areCyclesLoading, areMealsLoading, areWorkoutsLoading, areLabResultsLoading, toast]);
+    }, [userProfile, isProfileLoading, areSymptomsLoading, areCyclesLoading, areMealsLoading, areFitnessActivitiesLoading, areLabResultsLoading, toast, user]);
 
 
     return (
@@ -445,13 +522,7 @@ const AIGeneratedInsights = () => {
 };
 
 const ComparativeAnalytics = () => {
-    const { user } = useUser();
-    const firestore = useFirestore();
-    const cyclesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'cycles'), orderBy('startDate', 'desc'), limit(6));
-    }, [user, firestore]);
-    const { data: cycles, isLoading } = useCollection(cyclesQuery);
+    const { cycles, areCyclesLoading } = useUserHealthData();
 
     const avgCycleLength = useMemo(() => {
         if (!cycles || cycles.length < 2) return 0;
@@ -486,7 +557,7 @@ const ComparativeAnalytics = () => {
                 <CardDescription>See how your average cycle length compares.</CardDescription>
             </CardHeader>
             <CardContent>
-                {isLoading ? <Skeleton className="h-64" /> : avgCycleLength > 0 ? (
+                {areCyclesLoading ? <Skeleton className="h-64" /> : avgCycleLength > 0 ? (
                      <ChartContainer config={chartConfig} className="h-64 w-full">
                         <BarChart data={chartData} layout="vertical" margin={{left: 10}}>
                             <CartesianGrid horizontal={false} />
@@ -511,6 +582,69 @@ const ComparativeAnalytics = () => {
     );
 };
 
+const SubtypeEvolutionTracker = () => {
+    const { user } = useUser();
+    const firestore = useFirestore();
+
+    const analysesQuery = useMemoFirebase(() => {
+        if (!user || !firestore) return null;
+        return query(collection(firestore, 'users', user.uid, 'subtypeAnalyses'), orderBy('analysisDate', 'asc'), limit(12));
+    }, [user, firestore]);
+    const { data: analyses, isLoading } = useCollection(analysesQuery);
+
+    const chartData = useMemo(() => {
+        if (!analyses) return [];
+        return analyses.map(analysis => {
+            if (!analysis.phenotypeScores) return { date: format((analysis.analysisDate as any).toDate(), 'MMM d'), value: 0 };
+            const topScore = Math.max(...Object.values(analysis.phenotypeScores));
+            return {
+                date: format((analysis.analysisDate as any).toDate(), 'MMM d'),
+                value: topScore,
+            }
+        });
+    }, [analyses]);
+
+    const chartConfig = {
+        value: {
+          label: "Primary Driver Score",
+          color: "hsl(var(--chart-2))",
+        },
+    }
+
+    return (
+        <Card className="glass-card lg:col-span-2">
+            <CardHeader>
+                <CardTitle>Subtype Evolution</CardTitle>
+                <CardDescription>How your primary PCOS driver score has changed over time.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {isLoading ? <Skeleton className="h-64" /> : (analyses && analyses.length > 1) ? (
+                    <ChartContainer config={chartConfig} className="h-64 w-full">
+                        <AreaChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="fillEvolution" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.8}/>
+                                    <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.1}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                            <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} />
+                            <YAxis domain={[0, 100]} unit="%" tickLine={false} axisLine={false} tickMargin={8} />
+                            <Tooltip content={<ChartTooltipContent indicator="dot" />} />
+                            <Area type="monotone" dataKey="value" stroke="hsl(var(--chart-2))" strokeWidth={2} fillOpacity={1} fill="url(#fillEvolution)" />
+                        </AreaChart>
+                    </ChartContainer>
+                ) : (
+                    <div className="h-64 flex items-center justify-center text-muted-foreground text-center">
+                        <p>Perform at least two subtype analyses to see your evolution over time.</p>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+};
+
+
 export default function InsightsPage() {
     const { toast } = useToast();
     return (
@@ -532,12 +666,13 @@ export default function InsightsPage() {
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <HealthScoreDashboard />
+                <SubtypeEvolutionTracker />
                 <ComparativeAnalytics />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <SymptomCorrelationMatrix />
+                 <HealthScoreDashboard />
             </div>
 
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">

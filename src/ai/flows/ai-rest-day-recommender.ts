@@ -1,57 +1,52 @@
+
 'use server';
 /**
- * @fileOverview A flow for recommending a rest day based on recent fitness activity and cycle phase.
+ * @fileOverview A flow for providing a holistic recovery recommendation based on recent fitness, symptoms, and cycle data.
  *
- * - recommendRestDay - A function that analyzes workout data to recommend rest.
- * - RestDayRecommenderInput - The input type for the function.
- * - RestDayRecommenderOutput - The return type for the function.
+ * - recommendRecoveryAction - A function that analyzes user data to advise on recovery.
+ * - RecoveryRecommenderInput - The input type for the function.
+ * - RecoveryRecommenderOutput - The return type for the function.
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { RecoveryRecommenderInputSchema, RecoveryRecommenderOutputSchema } from './types/workout-types';
+import type { RecoveryRecommenderInput, RecoveryRecommenderOutput } from './types/workout-types';
 
-const RestDayRecommenderInputSchema = z.object({
-  fitnessData: z.string().describe("A JSON string of the user's fitness activities over the last 7 days."),
-  cyclePhase: z.enum(['menstrual', 'follicular', 'ovulation', 'luteal', 'unknown']).describe("The user's current menstrual cycle phase."),
-});
-export type RestDayRecommenderInput = z.infer<typeof RestDayRecommenderInputSchema>;
 
-const RestDayRecommenderOutputSchema = z.object({
-  recommendRest: z.boolean().describe('Set to true if a rest day is recommended.'),
-  reason: z.string().describe('A brief explanation for the recommendation, considering workout frequency, intensity, and cycle phase.'),
-});
-export type RestDayRecommenderOutput = z.infer<typeof RestDayRecommenderOutputSchema>;
-
-export async function recommendRestDay(input: RestDayRecommenderInput): Promise<RestDayRecommenderOutput> {
-  return recommendRestDayFlow(input);
+export async function recommendRecoveryAction(input: RecoveryRecommenderInput): Promise<RecoveryRecommenderOutput> {
+  return recommendRecoveryActionFlow(input);
 }
 
 const prompt = ai.definePrompt({
-  name: 'recommendRestDayPrompt',
-  input: { schema: RestDayRecommenderInputSchema },
-  output: { schema: RestDayRecommenderOutputSchema },
-  prompt: `You are a PCOS-aware fitness recovery expert. Your task is to analyze a user's workout data from the last 7 days and their current cycle phase to determine if they should take a rest day.
+  name: 'recommendRecoveryActionPrompt',
+  input: { schema: RecoveryRecommenderInputSchema },
+  output: { schema: RecoveryRecommenderOutputSchema },
+  prompt: `You are a PCOS-aware fitness recovery expert. Your task is to analyze a user's recent health snapshot to provide a holistic recovery recommendation.
 
-  Rules for recommending rest:
-  - Strongly recommend rest if the user has done 3 or more high-intensity workouts (like HIIT, Running) in the last 5 days.
-  - Recommend rest if the user has worked out for 5 or 6 consecutive days.
-  - Recommend rest or "active recovery" (like walking, stretching) if it's the menstrual phase and they've done more than 2 moderate workouts. The menstrual phase is a time for lower energy and recovery.
-  - If the user is in the luteal phase and has done several high-intensity workouts, suggest that dialing back intensity could be beneficial.
-  - If none of the above apply, do not recommend rest and provide an encouraging message that is phase-appropriate (e.g., "Your energy is high in the follicular phase, great day for a workout!").
-
-  Analyze the following data:
-  - Recent Workouts: {{{fitnessData}}}
+  **User's Health Snapshot:**
+  - Recent Health Data (workouts, symptoms, energy levels): {{{healthSnapshot}}}
   - Current Cycle Phase: {{{cyclePhase}}}
 
-  Based on your analysis, decide whether to recommend rest. Provide a clear, concise, data-driven, and phase-aware reason for your decision.
+  **Analysis Protocol:**
+  1.  **Calculate Recovery Score (0-100)**: Synthesize all available data.
+      - **Decrease Score For**: High frequency of intense workouts (3+ HIIT/Running in 5 days), 5+ consecutive workout days, logged symptoms like 'Fatigue' or 'Pain', low self-reported 'energyLevel' from daily check-ins.
+      - **Significantly Decrease Score For**: Being in the 'menstrual' phase combined with recent intense activity.
+      - **Maintain/Increase Score For**: Well-spaced workouts, recent rest days, high energy levels, and being in the 'follicular' or 'ovulation' phase.
+  2.  **Determine Recommendation**:
+      - **Recovery Score > 75%**: Recommend 'Workout'. Your reasoning should be encouraging and phase-appropriate.
+      - **Recovery Score 40-75%**: Recommend 'Active Recovery'. Your reasoning should explain why full intensity isn't ideal (e.g., "You've had a few intense sessions, so some light movement will help your muscles recover."). Provide 2-3 'suggestedActivities' like "Gentle Yoga", "Light Walk", or "Stretching".
+      - **Recovery Score < 40%**: Recommend 'Rest'. Your reasoning must be clear and supportive, emphasizing the importance of recovery (e.g., "You've been training hard and logged some fatigue. A full rest day is crucial for preventing burnout and supporting hormonal balance.").
+  3.  **Streak Protection**: If you see 4-5 consecutive days of workouts, include a gentle warning in your reasoning like, "Taking regular rest days is key to long-term progress."
+
+  Now, generate the complete recovery analysis.
   `,
 });
 
-const recommendRestDayFlow = ai.defineFlow(
+const recommendRecoveryActionFlow = ai.defineFlow(
   {
-    name: 'recommendRestDayFlow',
-    inputSchema: RestDayRecommenderInputSchema,
-    outputSchema: RestDayRecommenderOutputSchema,
+    name: 'recommendRecoveryActionFlow',
+    inputSchema: RecoveryRecommenderInputSchema,
+    outputSchema: RecoveryRecommenderOutputSchema,
   },
   async input => {
     const { output } = await prompt(input);

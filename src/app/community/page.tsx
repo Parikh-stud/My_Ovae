@@ -118,7 +118,7 @@ const CreatePost = ({ onPostCreated }: { onPostCreated: () => void }) => {
             
             if (moderationResult.isSafe) {
                 const postsRef = collection(firestore, 'communityPosts');
-                await addDocumentNonBlocking(postsRef, {
+                addDocumentNonBlocking(postsRef, {
                     userId: user.uid,
                     content: postContent,
                     category: 'General Support',
@@ -210,23 +210,27 @@ const PostItem = ({ post }: { post: any }) => {
 }
 
 export default function CommunityPage() {
+    const { user, isUserLoading } = useUser();
     const firestore = useFirestore();
     const [postCount, setPostCount] = useState(10);
 
     const postsQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
+        if (!firestore || isUserLoading || !user) return null;
         return query(collection(firestore, 'communityPosts'), orderBy('createdAt', 'desc'), limit(postCount));
-    }, [firestore, postCount]);
+    }, [firestore, user, isUserLoading, postCount]);
     const { data: communityPosts, isLoading: isLoadingPosts, error: postsError } = useCollection(postsQuery);
 
     const communityMembersQuery = useMemoFirebase(() => {
-        if (!firestore) return null;
+        if (!firestore || isUserLoading || !user) return null;
         return query(collection(firestore, 'publicUserProfiles'), limit(6));
-    }, [firestore]);
+    }, [firestore, user, isUserLoading]);
     const { data: communityMembers, isLoading: isLoadingMembers } = useCollection(communityMembersQuery);
 
     const onPostCreated = useCallback(() => {
-        setPostCount(prev => prev + 1);
+        // This will trigger a re-fetch of posts because the underlying data has changed.
+        // If immediate feedback is needed and you don't want to wait for the listener,
+        // you might manually refetch or update the local state.
+        // For simplicity, we'll rely on the real-time listener.
     }, []);
 
     return (

@@ -2,13 +2,12 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { v4 as uuidv4 } from 'uuid';
-import { format, formatDistanceToNow, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -17,16 +16,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { NotebookText, AlertTriangle, CalendarIcon, Plus, Trash2, Loader2, Save, BrainCircuit, Sparkles, LineChart } from "lucide-react";
+import { NotebookText, AlertTriangle, CalendarIcon, Plus, Trash2, Loader2, Save, BrainCircuit, Sparkles, LineChart, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useUser, useFirestore, useCollection, addDocumentNonBlocking, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, Timestamp, limit } from 'firebase/firestore';
+import { useUser, useFirestore, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analyzeLabResults, LabResultAnalysisOutput } from '@/ai/flows/ai-lab-result-analyzer';
 import { Separator } from '@/components/ui/separator';
 import { Area, AreaChart, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+import { useUserHealthData } from '@/hooks/use-user-health-data';
 
 const resultMarkerSchema = z.object({
   id: z.string(),
@@ -45,13 +44,95 @@ const labResultSchema = z.object({
 
 type LabResultFormValues = z.infer<typeof labResultSchema>;
 
+const AIAnalysisSection = ({ onAnalyze, analysisResult, isLoading }: { onAnalyze: () => void, analysisResult: LabResultAnalysisOutput | null, isLoading: boolean }) => {
+    return (
+        <Card className="glass-card lg:col-span-3">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-gradient"><Sparkles /> AI-Powered Analysis</CardTitle>
+                <CardDescription>Get a comprehensive analysis of your latest lab results in the context of your entire history.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {isLoading ? (
+                    <div className="flex items-center gap-3 text-muted-foreground">
+                        <Loader2 className="animate-spin" />
+                        <span>Generating your comprehensive analysis... This may take a moment.</span>
+                    </div>
+                ) : analysisResult ? (
+                    <div className="space-y-6">
+                         {analysisResult.predictiveAlert && (
+                            <Alert variant="default" className="border-amber-500/50 bg-amber-500/10 text-amber-500">
+                                <AlertTriangle className="h-4 w-4 !text-amber-500" />
+                                <AlertTitle className="font-bold">Predictive Alert</AlertTitle>
+                                <AlertDescription className="text-amber-400/80">
+                                    {analysisResult.predictiveAlert}
+                                </AlertDescription>
+                            </Alert>
+                        )}
+                        <div>
+                            <p className="text-sm font-bold uppercase text-primary">Key Takeaways</p>
+                            <ul className="list-disc pl-5 mt-2 text-muted-foreground">
+                                {analysisResult.keyTakeaways.map((item, i) => <li key={i}>{item}</li>)}
+                            </ul>
+                        </div>
+                        <Separator />
+                        <div>
+                            <p className="text-sm font-bold uppercase text-secondary">Trend Analysis</p>
+                            <p className="mt-2 text-muted-foreground">{analysisResult.trendAnalysis}</p>
+                        </div>
+                         {analysisResult.personalizedGoals && analysisResult.personalizedGoals.length > 0 && (
+                            <>
+                                <Separator />
+                                <div>
+                                    <p className="text-sm font-bold uppercase text-chart-4 flex items-center gap-2"><Target /> Goals for Your Next Check-in</p>
+                                    <div className="mt-2 space-y-2">
+                                        {analysisResult.personalizedGoals.map((goal, i) => (
+                                            <div key={i} className="p-3 bg-black/20 rounded-lg text-sm text-muted-foreground">
+                                               {goal}
+                                            </div>
+                                        ))}
+                                        <p className="text-xs text-muted-foreground/80">These are educational suggestions to discuss with your healthcare provider.</p>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                        <Separator />
+                         <div>
+                            <p className="text-sm font-bold uppercase text-chart-3">Marker Insights</p>
+                            <div className="mt-2 space-y-3">
+                             {analysisResult.markerAnalysis.map((item, i) => (
+                                <div key={i} className="p-3 bg-black/20 rounded-lg">
+                                    <p className="font-semibold">{item.marker}</p>
+                                    <p className="text-sm text-muted-foreground">{item.insight}</p>
+                                </div>
+                             ))}
+                             </div>
+                        </div>
+                         <Alert variant="destructive" className="mt-4">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertTitle>Disclaimer</AlertTitle>
+                            <AlertDescription>{analysisResult.disclaimer}</AlertDescription>
+                        </Alert>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center text-center gap-4 h-40">
+                         <p className="text-muted-foreground">Click the button to generate an AI-powered summary of your health trends.</p>
+                         <Button onClick={onAnalyze}>
+                            <BrainCircuit className="mr-2" /> Generate Full Analysis
+                        </Button>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
 const LabResultForm = ({ onFormSubmit }: { onFormSubmit: () => void }) => {
   const form = useForm<LabResultFormValues>({
     resolver: zodResolver(labResultSchema),
     defaultValues: {
       testType: '',
       provider: '',
-      results: [{ id: uuidv4(), marker: '', value: '', unit: '', normalRange: '' }],
+      results: [{ id: `marker-${Date.now()}`, marker: '', value: '', unit: '', normalRange: '' }],
     },
   });
 
@@ -65,7 +146,7 @@ const LabResultForm = ({ onFormSubmit }: { onFormSubmit: () => void }) => {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function onSubmit(data: LabResultFormValues) {
+  const onSubmit = async (data: LabResultFormValues) => {
     if (!user || !firestore) {
       toast({ variant: 'destructive', title: 'Error', description: 'User not authenticated.' });
       return;
@@ -77,6 +158,7 @@ const LabResultForm = ({ onFormSubmit }: { onFormSubmit: () => void }) => {
         await addDocumentNonBlocking(collectionRef, {
             ...data,
             userId: user.uid,
+            testDate: data.testDate,
         });
 
         toast({ title: 'Success', description: 'Lab results saved successfully.' });
@@ -84,7 +166,7 @@ const LabResultForm = ({ onFormSubmit }: { onFormSubmit: () => void }) => {
             testType: '',
             provider: '',
             testDate: undefined,
-            results: [{ id: uuidv4(), marker: '', value: '', unit: '', normalRange: '' }],
+            results: [{ id: `marker-${Date.now()}`, marker: '', value: '', unit: '', normalRange: '' }],
         });
         onFormSubmit();
     } catch (error) {
@@ -92,7 +174,15 @@ const LabResultForm = ({ onFormSubmit }: { onFormSubmit: () => void }) => {
     } finally {
         setIsSubmitting(false);
     }
-  }
+  };
+
+  const handleAppendMarker = useCallback(() => {
+    append({ id: `marker-${Date.now()}`, marker: '', value: '', unit: '', normalRange: '' });
+  }, [append]);
+
+  const handleRemoveMarker = useCallback((index: number) => {
+      remove(index);
+  }, [remove]);
 
   return (
     <Card className="glass-card">
@@ -200,7 +290,7 @@ const LabResultForm = ({ onFormSubmit }: { onFormSubmit: () => void }) => {
                             )}
                         />
                         {fields.length > 1 && (
-                            <Button type="button" variant="ghost" size="icon" className="absolute -top-3 -right-3 text-muted-foreground hover:text-destructive" onClick={() => remove(index)} disabled={isSubmitting}>
+                            <Button type="button" variant="ghost" size="icon" className="absolute -top-3 -right-3 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveMarker(index)} disabled={isSubmitting}>
                                 <Trash2 className="size-4" />
                             </Button>
                         )}
@@ -210,7 +300,7 @@ const LabResultForm = ({ onFormSubmit }: { onFormSubmit: () => void }) => {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => append({ id: uuidv4(), marker: '', value: '', unit: '', normalRange: '' })}
+                  onClick={handleAppendMarker}
                   disabled={isSubmitting}
                 >
                   <Plus className="mr-2"/> Add Marker
@@ -228,7 +318,7 @@ const LabResultForm = ({ onFormSubmit }: { onFormSubmit: () => void }) => {
   );
 };
 
-const PastLabResults = ({ labResults, isLoading, onAnalyze, analysisResults, analysisLoading }: { labResults: any[], isLoading: boolean, onAnalyze: (result: any) => void, analysisResults: {[key:string]: LabResultAnalysisOutput | null}, analysisLoading: string | null }) => {
+const PastLabResults = ({ labResults, isLoading, onDelete }: { labResults: any[], isLoading: boolean, onDelete: (id: string) => Promise<void> }) => {
     if (isLoading) {
         return <div className="space-y-4">
             <Skeleton className="h-24 w-full" />
@@ -256,60 +346,41 @@ const PastLabResults = ({ labResults, isLoading, onAnalyze, analysisResults, ana
         <Card className="glass-card">
             <CardHeader>
                 <CardTitle>Your Lab History</CardTitle>
+                <CardDescription>A record of all your past lab results.</CardDescription>
             </CardHeader>
             <CardContent>
                 <Accordion type="single" collapsible className="w-full">
                     {labResults.map(result => (
                         <AccordionItem value={result.id} key={result.id}>
                             <AccordionTrigger>
-                                <div className="flex justify-between w-full pr-4">
+                                <div className="flex justify-between items-center w-full pr-4">
                                     <span className="font-bold">{result.testType}</span>
-                                    <span className="text-muted-foreground">{format((result.testDate as any).toDate(), 'PPP')}</span>
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-muted-foreground text-sm">{format((result.testDate as any).toDate(), 'PPP')}</span>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-muted-foreground hover:text-destructive size-8"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDelete(result.id);
+                                            }}
+                                        >
+                                            <Trash2 className="size-4" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </AccordionTrigger>
                             <AccordionContent className="space-y-4">
                                 <ul className="space-y-2">
-                                    {result.results.map((marker: any) => (
-                                        <li key={marker.id} className="flex justify-between p-2 rounded bg-muted/50">
+                                    {result.results.map((marker: any, index: number) => (
+                                        <li key={index} className="flex justify-between p-2 rounded bg-muted/50">
                                             <span className="font-medium">{marker.marker}:</span>
                                             <span className="text-right">{marker.value} {marker.unit} <em className="text-xs text-muted-foreground">({marker.normalRange || 'N/A'})</em></span>
                                         </li>
                                     ))}
                                 </ul>
                                 {result.provider && <p className="text-xs text-muted-foreground">Provider: {result.provider}</p>}
-                                <Separator />
-
-                                {analysisLoading === result.id ? (
-                                    <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin" /> <span>Analyzing...</span></div>
-                                ) : analysisResults[result.id] ? (
-                                    <div className="space-y-4">
-                                        <h4 className="font-bold text-gradient flex items-center gap-2"><Sparkles /> AI Analysis</h4>
-                                        <div className="space-y-2">
-                                            <p className="text-sm font-bold uppercase text-primary">Key Takeaways</p>
-                                            <ul className="list-disc pl-5 text-sm text-muted-foreground">
-                                                {analysisResults[result.id]!.keyTakeaways.map((item, i) => <li key={i}>{item}</li>)}
-                                            </ul>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <p className="text-sm font-bold uppercase text-secondary">Marker Insights</p>
-                                             {analysisResults[result.id]!.markerAnalysis.map((item, i) => (
-                                                <div key={i} className="pt-2">
-                                                    <p className="font-semibold">{item.marker}</p>
-                                                    <p className="text-sm text-muted-foreground">{item.insight}</p>
-                                                </div>
-                                             ))}
-                                        </div>
-                                         <Alert variant="destructive" className="mt-4">
-                                            <AlertTriangle className="h-4 w-4" />
-                                            <AlertTitle>Disclaimer</AlertTitle>
-                                            <AlertDescription>{analysisResults[result.id]!.disclaimer}</AlertDescription>
-                                        </Alert>
-                                    </div>
-                                ) : (
-                                    <Button onClick={() => onAnalyze(result)} variant="secondary" disabled={!!analysisLoading}>
-                                        <BrainCircuit className="mr-2" /> Analyze Results with AI
-                                    </Button>
-                                )}
                             </AccordionContent>
                         </AccordionItem>
                     ))}
@@ -349,14 +420,13 @@ const LabResultTrendChart = ({ labResults }: { labResults: any[] }) => {
     }, [labResults]);
 
     useEffect(() => {
-        // Set initial selected marker only if it hasn't been set and markers are available
         if (!selectedMarker && markers.length > 0) {
             setSelectedMarker(markers[0]);
         }
     }, [markers, selectedMarker]);
     
     if (labResults.length < 2) {
-        return null; // Don't show chart if not enough data
+        return null;
     }
     
     const chartConfig = {
@@ -412,34 +482,45 @@ const LabResultTrendChart = ({ labResults }: { labResults: any[] }) => {
 
 
 export default function LabResultsPage() {
+    const { toast } = useToast();
     const { user } = useUser();
     const firestore = useFirestore();
-    const { toast } = useToast();
     const [formKey, setFormKey] = useState(0);
-    const [analysisResults, setAnalysisResults] = useState<{[key:string]: LabResultAnalysisOutput | null}>({});
-    const [analysisLoading, setAnalysisLoading] = useState<string | null>(null);
+    const [analysisResult, setAnalysisResult] = useState<LabResultAnalysisOutput | null>(null);
+    const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
 
-    const labResultsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'labResults'), orderBy('testDate', 'desc'));
-    }, [user, firestore, formKey]);
-    
-    const { data: labResults, isLoading } = useCollection(labResultsQuery);
-    
-    const symptomsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/symptomLogs`), orderBy('timestamp', 'desc'), limit(50));
-    }, [user, firestore]);
-    const { data: symptoms } = useCollection(symptomsQuery);
+    const { labResults, areLabResultsLoading, symptoms, cycles } = useUserHealthData();
 
-    const cyclesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'cycles'), orderBy('startDate', 'desc'), limit(6));
-    }, [user, firestore]);
-    const { data: cycles } = useCollection(cyclesQuery);
+    const handleFormSubmit = useCallback(() => {
+        setFormKey(prev => prev + 1)
+    }, []);
 
-    const handleAnalyzeResult = useCallback(async (result: any) => {
-        setAnalysisLoading(result.id);
+    const handleDeleteResult = useCallback(async (resultId: string) => {
+        if (!user || !firestore) return;
+        const docRef = doc(firestore, 'users', user.uid, 'labResults', resultId);
+        try {
+            await deleteDocumentNonBlocking(docRef);
+            toast({
+                title: 'Result Deleted',
+                description: 'The lab result has been removed.',
+            });
+        } catch(error) {
+            toast({
+                variant: 'destructive',
+                title: 'Error',
+                description: 'Could not remove lab result. Please try again.'
+            });
+        }
+    }, [user, firestore, toast]);
+
+    const handleAnalyzeResults = useCallback(async () => {
+        if (!labResults || labResults.length === 0) {
+            toast({ variant: 'destructive', title: 'No Data', description: 'Please log at least one lab result to get an analysis.'});
+            return;
+        }
+
+        setIsAnalysisLoading(true);
+        setAnalysisResult(null);
         const symptomSummary = JSON.stringify([...new Set(symptoms?.map(s => s.symptomType) || [])]);
         let cycleSummary = "No cycle data logged.";
         if (cycles && cycles.length > 1) {
@@ -449,23 +530,25 @@ export default function LabResultsPage() {
                 cycleSummary = `Cycles average around ${avgLength} days.`;
             }
         }
+
+        const historicalResults = labResults.map(res => ({
+            ...res,
+            testDate: format((res.testDate as any).toDate(), 'yyyy-MM-dd')
+        }));
         
         try {
             const analysis = await analyzeLabResults({
-                labResult: {
-                    ...result,
-                    testDate: format((result.testDate as any).toDate(), 'yyyy-MM-dd'),
-                },
+                labResults: historicalResults,
                 symptomSummary,
                 cycleSummary,
             });
-            setAnalysisResults(prev => ({...prev, [result.id]: analysis}));
+            setAnalysisResult(analysis);
         } catch (error) {
             toast({ variant: 'destructive', title: 'Analysis Failed', description: 'Could not get AI insights for this lab result.' });
         } finally {
-            setAnalysisLoading(null);
+            setIsAnalysisLoading(false);
         }
-    }, [symptoms, cycles, toast]);
+    }, [symptoms, cycles, labResults, toast]);
 
     return (
         <div className="p-4 md:p-8 space-y-6">
@@ -484,16 +567,16 @@ export default function LabResultsPage() {
                 </AlertDescription>
             </Alert>
             
-            {isLoading ? <Skeleton className="h-64 w-full" /> : <LabResultTrendChart labResults={labResults || []} />}
+            <AIAnalysisSection onAnalyze={handleAnalyzeResults} analysisResult={analysisResult} isLoading={isAnalysisLoading} />
+
+            {areLabResultsLoading ? <Skeleton className="h-64 w-full" /> : <LabResultTrendChart labResults={labResults || []} />}
             
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                 <LabResultForm key={formKey} onFormSubmit={() => setFormKey(prev => prev + 1)} />
+                 <LabResultForm key={formKey} onFormSubmit={handleFormSubmit} />
                  <PastLabResults 
                     labResults={labResults || []} 
-                    isLoading={isLoading} 
-                    onAnalyze={handleAnalyzeResult}
-                    analysisResults={analysisResults}
-                    analysisLoading={analysisLoading}
+                    isLoading={areLabResultsLoading} 
+                    onDelete={handleDeleteResult}
                  />
              </div>
         </div>

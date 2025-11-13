@@ -1,0 +1,895 @@
+
+{
+  "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents a user profile within the MyOvae application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user profile."
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address.",
+          "format": "email"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User's display name."
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "URL of the user's profile photo.",
+          "format": "uri"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the user profile was created.",
+          "format": "date-time"
+        },
+        "lastLogin": {
+          "type": "string",
+          "description": "Timestamp indicating the user's last login.",
+          "format": "date-time"
+        },
+        "onboardingCompleted": {
+          "type": "boolean",
+          "description": "Indicates whether the user has completed the onboarding process."
+        },
+        "themePreference": {
+          "type": "string",
+          "description": "The user's preferred app theme."
+        },
+        "availableEquipment": {
+            "type": "array",
+            "description": "A list of fitness equipment the user has available, learned from their activity history.",
+            "items": {
+                "type": "string"
+            }
+        },
+        "dockPreferences": {
+            "type": "object",
+            "description": "Stores user preferences for the navigation dock.",
+            "properties": {
+                "position": {
+                    "type": "string",
+                    "enum": ["bottom", "left", "right"],
+                    "description": "The preferred position of the dock on the screen."
+                },
+                "iconSize": {
+                    "type": "string",
+                    "enum": ["small", "medium", "large"],
+                    "description": "The preferred size of the icons in the dock."
+                }
+            }
+        },
+        "onboarding": {
+          "type": "object",
+          "description": "Stores user's onboarding progress and preferences.",
+          "properties": {
+            "currentStep": {
+              "type": "string"
+            },
+            "journeyStatus": {
+              "type": "object"
+            },
+            "symptoms": {
+              "type": "object"
+            },
+            "notificationPreferences": {
+              "type": "object"
+            },
+            "privacySettings": {
+              "type": "object"
+            }
+          }
+        },
+        "emergencyContact": {
+          "type": "object",
+          "description": "Emergency contact information.",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            },
+            "relationship": {
+              "type": "string"
+            }
+          }
+        },
+        "pcosJourneyProgress": {
+          "type": "number",
+          "description": "The user's progress (day number) in the 90-day PCOS journey."
+        },
+        "healthScore": {
+          "type": "number",
+          "description": "The user's overall health score, calculated periodically."
+        },
+        "dob": {
+          "type": "string",
+          "description": "User's date of birth.",
+          "format": "date"
+        },
+        "journeyStartDate": {
+          "type": "string",
+          "description": "The date the user started their PCOS journey.",
+          "format": "date"
+        },
+        "wellnessGoal": {
+          "type": "string",
+          "description": "The user's primary wellness goal.",
+          "enum": [
+            "Hormone Balance",
+            "Symptom Management",
+            "Cycle Regulation",
+            "Fertility",
+            "Weight Management",
+            "Mental Wellness",
+            "General Health"
+          ]
+        },
+        "conversationHistory": {
+          "type": "array",
+          "description": "Stores the last 10 turns of the user's conversation with the AI coach, Ovie. Entries older than 30 days should be pruned.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "userQuery": {
+                "type": "string"
+              },
+              "aiResponse": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+             "required": ["userQuery", "aiResponse", "timestamp"]
+          }
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "createdAt"
+      ]
+    },
+    "SymptomLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "SymptomLog",
+      "type": "object",
+      "description": "Represents a log of a user's symptom entry.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the symptom log entry."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N SymptomLog)"
+        },
+        "symptomType": {
+          "type": "string",
+          "description": "The type or name of the symptom (e.g., 'Headache', 'Bloating')."
+        },
+        "severity": {
+          "type": "number",
+          "description": "Severity level of the symptom, typically on a scale of 1-5."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "The exact date and time when the symptom was logged.",
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Any additional notes or context provided by the user."
+        },
+        "bodyZone": {
+          "type": "string",
+          "description": "The area of the body where the symptom is felt (e.g., 'Head', 'Abdomen')."
+        },
+        "cycleDay": {
+          "type": "number",
+          "description": "The day of the menstrual cycle on which the symptom was logged."
+        },
+        "mood": {
+          "type": "string",
+          "description": "The user's self-reported mood at the time of logging."
+        },
+        "energyLevel": {
+          "type": "number",
+          "description": "The user's self-reported energy level (e.g., on a scale of 1-10)."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "symptomType",
+        "severity",
+        "timestamp"
+      ]
+    },
+    "Cycle": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Cycle",
+      "type": "object",
+      "description": "Represents a menstrual cycle for a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the cycle."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N Cycle)"
+        },
+        "startDate": {
+          "type": "string",
+          "description": "Date the cycle started.",
+          "format": "date-time"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "Date the cycle ended (null if ongoing).",
+          "format": "date-time"
+        },
+        "length": {
+          "type": "number",
+          "description": "Cycle length in days."
+        },
+        "notes": {
+          "type": "string",
+          "description": "User notes for the entire cycle."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "startDate"
+      ]
+    },
+    "CycleLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CycleLog",
+      "type": "object",
+      "description": "Represents a daily log entry within a specific menstrual cycle.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the daily log."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Denormalized user ID for security rules."
+        },
+        "cycleId": {
+          "type": "string",
+          "description": "Reference to the Cycle this log belongs to."
+        },
+        "date": {
+          "type": "string",
+          "description": "The specific date of the log entry.",
+          "format": "date-time"
+        },
+        "flow": {
+          "type": "string",
+          "description": "Menstrual flow level for the day.",
+          "enum": [
+            "none",
+            "light",
+            "medium",
+            "heavy",
+            "spotting"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "description": "User notes for the day."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "cycleId",
+        "date"
+      ]
+    },
+    "MoodLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MoodLog",
+      "type": "object",
+      "description": "Represents a log of a user's mood entry.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the mood log entry."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N MoodLog)"
+        },
+        "mood": {
+          "type": "string",
+          "description": "The mood recorded (e.g., happy, sad, anxious)."
+        },
+        "intensity": {
+          "type": "number",
+          "description": "Intensity of the mood (e.g., 1-5)."
+        },
+        "loggedAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the mood was logged.",
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the mood."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "mood",
+        "intensity",
+        "loggedAt"
+      ]
+    },
+    "DailyCheckIn": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "DailyCheckIn",
+      "type": "object",
+      "description": "Represents a daily check-in for mood and energy levels.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the check-in, formatted as 'YYYY-MM-DD'."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile."
+        },
+        "date": {
+          "type": "string",
+          "description": "The date of the check-in.",
+          "format": "date-time"
+        },
+        "mood": {
+          "type": "number",
+          "description": "User's self-reported mood rating (1-5)."
+        },
+        "energyLevel": {
+          "type": "number",
+          "description": "User's self-reported energy level (1-5)."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "date",
+        "mood",
+        "energyLevel"
+      ]
+    },
+    "NutritionLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "NutritionLog",
+      "type": "object",
+      "description": "Represents a log of a user's nutrition intake.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the nutrition log entry."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N NutritionLog)"
+        },
+        "mealName": {
+          "type": "string",
+          "description": "Name of the meal (e.g., Breakfast, Lunch, Dinner)."
+        },
+        "foodItems": {
+          "type": "string",
+          "description": "A list of food items consumed during the meal."
+        },
+        "loggedAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the meal was logged.",
+          "format": "date-time"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "URL of the meal's photo (if available).",
+          "format": "uri"
+        },
+        "pcosScore": {
+          "type": "number",
+          "description": "PCOS friendly score (0-100) for the food that was logged"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "mealName",
+        "foodItems",
+        "loggedAt"
+      ]
+    },
+    "FitnessActivity": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FitnessActivity",
+      "type": "object",
+      "description": "Represents a fitness activity performed by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the fitness activity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N FitnessActivity)"
+        },
+        "activityType": {
+          "type": "string",
+          "description": "Type of fitness activity (e.g., Running, Yoga, Strength Training)."
+        },
+        "duration": {
+          "type": "number",
+          "description": "Duration of the activity in minutes."
+        },
+        "caloriesBurned": {
+          "type": "number",
+          "description": "Estimated calories burned during the activity."
+        },
+        "completedAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the activity was completed.",
+          "format": "date-time"
+        },
+        "intensity": {
+          "type": "number",
+          "description": "User-reported intensity of the workout (e.g., on a scale of 1-10)."
+        },
+        "cyclePhase": {
+          "type": "string",
+          "description": "The menstrual cycle phase during which the activity was performed."
+        },
+        "energyLevel": {
+          "type": "object",
+          "properties": {
+            "before": {
+              "type": "number"
+            },
+            "after": {
+              "type": "number"
+            }
+          }
+        },
+        "notes": {
+          "type": "string",
+          "description": "User notes about the workout, can store JSON of the generated workout."
+        },
+        "effectiveness": {
+          "type": "object",
+          "description": "AI analysis of the workout's effectiveness based on user feedback.",
+          "properties": {
+              "score": { "type": "number" },
+              "feedback": { "type": "string" },
+              "effortLevel": { "type": "number" }
+          }
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "activityType",
+        "duration",
+        "completedAt"
+      ]
+    },
+    "CommunityPost": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CommunityPost",
+      "type": "object",
+      "description": "Represents a post within the community platform.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the community post."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N CommunityPost)"
+        },
+        "category": {
+          "type": "string",
+          "description": "Category of the post (e.g., Support, Success Stories)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the post."
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the post."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the post was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "category",
+        "title",
+        "content",
+        "createdAt"
+      ]
+    },
+    "Subscription": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Subscription",
+      "type": "object",
+      "description": "Represents a user's subscription details.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the subscription."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:1 Subscription)"
+        },
+        "planType": {
+          "type": "string",
+          "description": "Type of subscription plan (e.g., Free, Premium, Family)."
+        },
+        "startDate": {
+          "type": "string",
+          "description": "Date the subscription started.",
+          "format": "date-time"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "Date the subscription ends.",
+          "format": "date-time"
+        },
+        "autoRenew": {
+          "type": "boolean",
+          "description": "Indicates whether the subscription automatically renews."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "planType",
+        "startDate",
+        "autoRenew"
+      ]
+    },
+    "HealthcareProvider": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "HealthcareProvider",
+      "type": "object",
+      "description": "Represents a healthcare provider connected to a user's account.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the provider connection."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile."
+        },
+        "providerName": {
+          "type": "string"
+        },
+        "specialty": {
+          "type": "string"
+        },
+        "clinic": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "sharePermissions": {
+          "type": "object",
+          "properties": {
+            "symptoms": {
+              "type": "boolean"
+            },
+            "cycles": {
+              "type": "boolean"
+            },
+            "nutrition": {
+              "type": "boolean"
+            },
+            "fitness": {
+              "type": "boolean"
+            }
+          }
+        },
+        "connectionDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sharingToken": {
+          "type": "string",
+          "description": "Secure token for provider access."
+        },
+        "sharingExpiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp for when the sharing token expires."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "providerName",
+        "email",
+        "connectionDate"
+      ]
+    },
+    "LabResult": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "LabResult",
+      "type": "object",
+      "description": "Represents a lab result entry for a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the lab result."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to UserProfile."
+        },
+        "testDate": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "testType": {
+          "type": "string",
+          "description": "e.g., 'Hormone Panel', 'Blood Glucose'"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "marker": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "normalRange": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "marker",
+              "value",
+              "unit"
+            ]
+          }
+        },
+        "provider": {
+          "type": "string",
+          "description": "Name of the provider who ordered the test."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "testDate",
+        "testType",
+        "results"
+      ]
+    },
+    "PredictionLog": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "PredictionLog",
+        "type": "object",
+        "description": "Stores the output of an AI symptom prediction for future accuracy tracking.",
+        "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "predictionDate": { "type": "string", "format": "date-time" },
+            "targetSymptom": { "type": "string" },
+            "forecast": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "date": { "type": "string", "format": "date" },
+                        "predictedRisk": { "type": "number" }
+                    },
+                    "required": ["date", "predictedRisk"]
+                }
+            },
+            "wasSymptomLogged": { "type": "boolean", "description": "True if the user actually logged the symptom on the predicted day." }
+        },
+        "required": ["id", "userId", "predictionDate", "targetSymptom", "forecast"]
+    },
+    "PcosSubtypeAnalysisLog": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "PcosSubtypeAnalysisLog",
+        "type": "object",
+        "description": "Stores the historical output of a PCOS Subtype Identifier analysis.",
+        "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "analysisDate": { "type": "string", "format": "date-time" },
+            "confidenceScore": { "type": "number" },
+            "phenotypeScores": {
+                "type": "object",
+                "properties": {
+                    "insulinResistance": { "type": "number" },
+                    "inflammation": { "type": "number" },
+                    "adrenal": { "type": "number" },
+                    "hormonalImbalance": { "type": "number" }
+                },
+                "required": ["insulinResistance", "inflammation", "adrenal", "hormonalImbalance"]
+            }
+        },
+        "required": ["id", "userId", "analysisDate", "confidenceScore", "phenotypeScores"]
+    },
+    "WorkoutEffectivenessLog": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "WorkoutEffectivenessLog",
+        "description": "Stores the AI analysis of a user's workout effectiveness based on their feedback.",
+        "type": "object",
+        "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "activityId": { "type": "string" },
+            "analysisDate": { "type": "string", "format": "date-time" },
+            "effectivenessScore": { "type": "number" },
+            "feedback": { "type": "string" },
+            "userEffortLevel": { "type": "number" }
+        },
+        "required": ["id", "userId", "activityId", "analysisDate", "effectivenessScore"]
+    },
+    "CyclePredictionLog": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "CyclePredictionLog",
+        "description": "Stores the historical output of an AI Cycle Prediction analysis.",
+        "type": "object",
+        "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "predictionDate": { "type": "string", "format": "date-time" },
+            "confidenceScore": { "type": "number" },
+            "reasoning": { "type": "string" },
+            "predictedPeriodStartDate": { "type": "string", "format": "date" }
+        },
+        "required": ["id", "userId", "predictionDate", "confidenceScore", "predictedPeriodStartDate"]
+    }
+  },
+  "auth": {
+    "providers": [
+      "email",
+      "google.com"
+    ]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Collection to store user profiles. The userId is the Firebase Authentication UID."
+    },
+    "/users/{userId}/dailyCheckIns/{checkInId}": {
+      "schema": {
+        "$ref": "#/entities/DailyCheckIn"
+      },
+      "description": "Collection to store daily mood and energy check-ins. The checkInId is the date formatted as YYYY-MM-DD."
+    },
+    "/publicUserProfiles/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Collection to store public-facing user profiles for community display. Read by any authenticated user. Writable only by the user themselves."
+    },
+    "/users/{userId}/symptomLogs/{symptomLogId}": {
+      "schema": {
+        "$ref": "#/entities/SymptomLog"
+      },
+      "description": "Collection to store symptom logs for a specific user. The userId is the Firebase Authentication UID."
+    },
+    "/users/{userId}/cycles/{cycleId}": {
+      "schema": {
+        "$ref": "#/entities/Cycle"
+      },
+      "description": "Collection to store menstrual cycle data for a specific user. The userId is the Firebase Authentication UID."
+    },
+    "/users/{userId}/cycles/{cycleId}/logs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/CycleLog"
+      },
+      "description": "Collection to store daily logs for a specific cycle. The userId and cycleId are part of the path."
+    },
+    "/users/{userId}/moodLogs/{moodLogId}": {
+      "schema": {
+        "$ref": "#/entities/MoodLog"
+      },
+      "description": "Collection to store mood logs for a specific user. The userId is the Firebase Authentication UID."
+    },
+    "/users/{userId}/nutritionLogs/{nutritionLogId}": {
+      "schema": {
+        "$ref": "#/entities/NutritionLog"
+      },
+      "description": "Collection to store nutrition logs for a specific user. The userId is the Firebase Authentication UID."
+    },
+    "/users/{userId}/fitnessActivities/{fitnessActivityId}": {
+      "schema": {
+        "$ref": "#/entities/FitnessActivity"
+      },
+      "description": "Collection to store fitness activity data for a specific user. The userId is the Firebase Authentication UID."
+    },
+    "/communityPosts/{communityPostId}": {
+      "schema": {
+        "$ref": "#/entities/CommunityPost"
+      },
+      "description": "Collection to store community posts.  Anyone can read a post, but only the owner or admin can modify or delete them. CommunityPost objects contain userId, which will be used to validate ownership."
+    },
+    "/users/{userId}/subscription": {
+      "schema": {
+        "$ref": "#/entities/Subscription"
+      },
+      "description": "Collection to store subscription information for a specific user. The userId is the Firebase Authentication UID."
+    },
+    "/users/{userId}/providers/{providerId}": {
+      "schema": {
+        "$ref": "#/entities/HealthcareProvider"
+      },
+      "description": "Stores connections to healthcare providers for a user."
+    },
+    "/users/{userId}/labResults/{resultId}": {
+      "schema": {
+        "$ref": "#/entities/LabResult"
+      },
+      "description": "Stores lab results for a user."
+    },
+    "/users/{userId}/predictions/{predictionId}": {
+        "schema": {
+            "$ref": "#/entities/PredictionLog"
+        },
+        "description": "Stores historical AI predictions for accuracy tracking."
+    },
+    "/users/{userId}/subtypeAnalyses/{analysisId}": {
+        "schema": {
+            "$ref": "#/entities/PcosSubtypeAnalysisLog"
+        },
+        "description": "Stores historical PCOS subtype analysis results to track evolution over time."
+    },
+     "/users/{userId}/workoutEffectiveness/{logId}": {
+        "schema": {
+            "$ref": "#/entities/WorkoutEffectivenessLog"
+        },
+        "description": "Stores historical AI analysis of workout effectiveness."
+    },
+    "/users/{userId}/cyclePredictions/{predictionId}": {
+        "schema": {
+            "$ref": "#/entities/CyclePredictionLog"
+        },
+        "description": "Stores historical AI cycle predictions for accuracy tracking and model improvement."
+    }
+  }
+}

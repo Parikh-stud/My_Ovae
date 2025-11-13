@@ -1,25 +1,35 @@
 
 'use client';
 
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dumbbell, Zap, RotateCw, BarChart, Sun, Moon, Droplet, Star, Loader2, Plus, Flame, Sparkles, Check, Bed } from 'lucide-react';
+import { Dumbbell, Zap, RotateCw, Bed, Loader2, Plus, Sparkles, Check, Info, Star } from 'lucide-react';
 import { m } from 'framer-motion';
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useUser, useFirestore, useCollection, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
-import { collection, query, orderBy, limit, where, Timestamp } from 'firebase/firestore';
-import { differenceInDays, formatDistanceToNow, subDays } from 'date-fns';
+import { useUser, useFirestore, addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
-import { Label } from '@/components/ui/label';
-import { generateWorkout, GenerateWorkoutOutput } from '@/ai/flows/ai-generated-workout';
-import { recommendRestDay, RestDayRecommenderOutput } from '@/ai/flows/ai-rest-day-recommender';
+import { generateWorkout } from '@/ai/flows/ai-generate-workout';
 import { customizeWorkout } from '@/ai/flows/ai-customize-workout';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import type { GenerateWorkoutOutput, GenerateWorkoutInput } from '@/ai/flows/types/workout-types';
+import { recommendRecoveryAction } from '@/ai/flows/ai-rest-day-recommender';
+import type { RecoveryRecommenderOutput } from '@/ai/flows/types/workout-types';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
+import { useUserHealthData } from '@/hooks/use-user-health-data';
+import { FitnessHistory } from './fitness-history';
+import { LogActivityForm } from './log-activity-form';
+import { CycleSyncedWorkouts } from './cycle-synced-workouts';
+import { MultiSelect, type MultiSelectOption } from '@/components/ui/multi-select';
+import { collection, doc } from 'firebase/firestore';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { scoreWorkoutEffectiveness } from '@/ai/flows/ai-workout-effectiveness-scorer';
+import type { WorkoutEffectivenessOutput } from '@/ai/flows/types/workout-types';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { useUserProfile } from '@/hooks/use-user-profile';
 
 const workoutCategories = [
     {
@@ -52,92 +62,61 @@ const workoutCategories = [
     }
 ];
 
-const activityTypes = [
-    "Yoga", "Strength Training", "Running", "Walking", "Cycling", "HIIT", "Pilates", "Dancing"
+const equipmentOptions: MultiSelectOption[] = [
+    { value: 'dumbbells', label: 'Dumbbells' },
+    { value: 'resistance-bands', label: 'Resistance Bands' },
+    { value: 'kettlebell', label: 'Kettlebell' },
+    { value: 'yoga-mat', label: 'Yoga Mat' },
+    { value: 'jump-rope', label: 'Jump Rope' },
+    { value: 'foam-roller', label: 'Foam Roller' },
 ];
 
-const WorkoutCategoryCard = ({ category, index, onClick }: { category: any, index: number, onClick: () => void }) => (
-    <m.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 * index }}
-        whileHover={{ translateY: -5 }}
-        onClick={onClick}
-    >
-        <Card className="glass-card h-full cursor-pointer">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-3">
-                    <span className="text-2xl">{category.icon}</span>
-                    <span className={cn(category.color, "font-bold")}>{category.name}</span>
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground">{category.description}</p>
-            </CardContent>
-        </Card>
-    </m.div>
-);
-
-const cyclePhaseWorkouts = {
-    menstrual: {
-        icon: <Droplet className="text-cycle-menstrual" />,
-        phase: "Menstrual",
-        title: "Restorative Yoga",
-        description: "Focus on gentle movement and deep rest. Listen to your body.",
-    },
-    follicular: {
-        icon: <Sun className="text-cycle-follicular" />,
-        phase: "Follicular",
-        title: "Light Cardio & Hikes",
-        description: "Energy is returning. A great time for moderate-intensity activities.",
-    },
-    ovulation: {
-        icon: <Star className="text-cycle-ovulation" />,
-        phase: "Ovulation",
-        title: "High-Intensity Interval Training (HIIT)",
-        description: "Your energy is at its peak. Perfect for a challenging workout.",
-    },
-    luteal: {
-        icon: <Moon className="text-cycle-luteal" />,
-        phase: "Luteal",
-        title: "Strength Training",
-        description: "Focus on building muscle and stability as energy starts to wane.",
-    },
-    unknown: {
-        icon: <Zap className="text-muted-foreground" />,
-        phase: "Unknown",
-        title: "Mindful Movement",
-        description: "Log your cycle to get personalized recommendations.",
-    }
-};
-
-
-const CycleSyncedWorkouts = ({ onStartWorkout, currentPhase }: { onStartWorkout: (goal: string) => void, currentPhase: string }) => {
-    const workout = cyclePhaseWorkouts[currentPhase as keyof typeof cyclePhaseWorkouts];
+const WorkoutCategoryCard = ({ category, index, onClick }: { category: any, index: number, onClick: (id: string) => void }) => {
+    const handleClick = useCallback(() => {
+        onClick(category.id);
+    }, [onClick, category.id]);
 
     return (
-        <Card className="glass-card">
-            <CardHeader>
-                <CardTitle>Cycle-Synced Recommendation</CardTitle>
-                <CardDescription>A workout tailored to your current <span className={cn('font-bold', workout.icon.props.className)}>{workout.phase}</span> phase.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="flex flex-col md:flex-row items-center gap-6">
-                    <div className="p-4 bg-muted/50 rounded-full">
-                        {React.cloneElement(workout.icon, { className: "size-8" })}
-                    </div>
-                    <div className="flex-1 text-center md:text-left">
-                        <h3 className="text-xl font-bold font-headline">{workout.title}</h3>
-                        <p className="text-muted-foreground">{workout.description}</p>
-                    </div>
-                    <Button className="continue-button-pulse" onClick={() => onStartWorkout('general-wellness')}>Start Workout</Button>
-                </div>
-            </CardContent>
-        </Card>
+        <m.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 * index }}
+            whileHover={{ translateY: -5 }}
+            onClick={handleClick}
+        >
+            <Card className="glass-card h-full cursor-pointer">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-3">
+                        <span className="text-2xl">{category.icon}</span>
+                        <span className={cn(category.color, "font-bold")}>{category.name}</span>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm text-muted-foreground">{category.description}</p>
+                </CardContent>
+            </Card>
+        </m.div>
     );
 };
 
-const RestDayRecommender = ({ recommendation, isLoading }: { recommendation: RestDayRecommenderOutput | null; isLoading: boolean; }) => {
+const RecoveryAdvisor = ({ recommendation, isLoading }: { recommendation: RecoveryRecommenderOutput | null; isLoading: boolean; }) => {
+    
+    const getRecommendationDetails = () => {
+        if (!recommendation) return { icon: <Bed size={24} />, title: 'Awaiting Analysis', color: 'text-muted-foreground' };
+        switch (recommendation.recommendation) {
+            case 'Workout':
+                return { icon: <Dumbbell size={24} />, title: "You're Good to Go!", color: 'text-green-500' };
+            case 'Active Recovery':
+                return { icon: <Zap size={24} />, title: "Active Recovery Recommended", color: 'text-yellow-500' };
+            case 'Rest':
+                return { icon: <Bed size={24} />, title: "Rest Day Recommended", color: 'text-blue-500' };
+            default:
+                return { icon: <Bed size={24} />, title: 'Awaiting Analysis', color: 'text-muted-foreground' };
+        }
+    };
+
+    const details = getRecommendationDetails();
+
     return (
         <Card className="glass-card lg:col-span-2">
             <CardHeader>
@@ -151,138 +130,75 @@ const RestDayRecommender = ({ recommendation, isLoading }: { recommendation: Res
                         <span>Analyzing your recent activity...</span>
                     </div>
                 ) : recommendation ? (
-                    <div className={cn("p-4 rounded-lg flex items-center gap-4", recommendation.recommendRest ? 'bg-primary/10' : 'bg-muted/50')}>
-                        <div className={cn("p-3 rounded-full", recommendation.recommendRest ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground')}>
-                            {recommendation.recommendRest ? <Bed size={24} /> : <Dumbbell size={24} />}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-4">
+                            <div className="flex flex-col items-center gap-2 w-24">
+                                <p className="text-sm text-muted-foreground">Recovery</p>
+                                <div className="relative size-20">
+                                    <svg className="absolute size-full transform -rotate-90">
+                                        <circle className="text-muted/20" strokeWidth="6" stroke="currentColor" fill="transparent" r="28" cx="50%" cy="50%" />
+                                        <m.circle
+                                            className={details.color}
+                                            strokeWidth="6"
+                                            strokeDasharray={2 * Math.PI * 28}
+                                            strokeLinecap="round"
+                                            stroke="currentColor"
+                                            fill="transparent"
+                                            r="28"
+                                            cx="50%"
+                                            cy="50%"
+                                            initial={{ strokeDashoffset: 2 * Math.PI * 28 }}
+                                            animate={{ strokeDashoffset: 2 * Math.PI * 28 * (1 - recommendation.recoveryScore / 100) }}
+                                            transition={{ duration: 1, ease: 'easeOut' }}
+                                        />
+                                    </svg>
+                                    <div className="absolute inset-0 flex items-center justify-center text-xl font-bold font-code">
+                                        {recommendation.recoveryScore}%
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex-1 space-y-2">
+                                <div className={cn("p-4 rounded-lg flex items-center gap-4 bg-black/20")}>
+                                    <div className={cn("p-3 rounded-full bg-muted", details.color)}>
+                                        {details.icon}
+                                    </div>
+                                    <div className="flex-1">
+                                        <h4 className="font-bold">{details.title}</h4>
+                                        <p className="text-sm text-muted-foreground">{recommendation.reasoning}</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div className="flex-1">
-                            <h4 className="font-bold">{recommendation.recommendRest ? "Rest Day Recommended" : "You're Good to Go!"}</h4>
-                            <p className="text-sm text-muted-foreground">{recommendation.reason}</p>
-                        </div>
+
+                         {recommendation.recommendation === 'Active Recovery' && recommendation.suggestedActivities && (
+                            <div className="space-y-2">
+                                <h5 className="text-sm font-semibold">Suggested Activities</h5>
+                                <div className="flex flex-wrap gap-2">
+                                    {recommendation.suggestedActivities.map(activity => (
+                                        <Badge key={activity} variant="outline">{activity}</Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 ) : (
-                    <div className="text-muted-foreground">Not enough data to make a recommendation.</div>
+                    <div className="text-muted-foreground text-center p-4">Not enough data to make a recommendation.</div>
                 )}
             </CardContent>
         </Card>
     );
 }
 
-const LogActivityForm = ({ onActivityLogged }: { onActivityLogged: () => void }) => {
-    const { user } = useUser();
-    const firestore = useFirestore();
-    const { toast } = useToast();
-    const [activityType, setActivityType] = useState('');
-    const [duration, setDuration] = useState(30);
-    const [isLoading, setIsLoading] = useState(false);
-
-    const handleLogActivity = async () => {
-        if (!activityType || !user || !firestore) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Please select an activity type.' });
-            return;
-        }
-        setIsLoading(true);
-
-        const activityData = {
-            userId: user.uid,
-            activityType,
-            duration,
-            completedAt: new Date(),
-        };
-
-        try {
-            await addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'fitnessActivities'), activityData);
-            toast({ title: 'Activity Logged!', description: `${activityType} for ${duration} minutes.` });
-            setActivityType('');
-            setDuration(30);
-            onActivityLogged();
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not log activity. Please try again.' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <Card className="glass-card">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Plus /> Log an Activity</CardTitle>
-                <CardDescription>Keep track of your movement and progress.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                <div className="space-y-2">
-                    <Label>Activity Type</Label>
-                    <Select value={activityType} onValueChange={setActivityType}>
-                        <SelectTrigger><SelectValue placeholder="Choose an activity..." /></SelectTrigger>
-                        <SelectContent>
-                            {activityTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <div className="space-y-2">
-                    <Label>Duration: {duration} minutes</Label>
-                    <Slider value={[duration]} onValueChange={(value) => setDuration(value[0])} min={5} max={120} step={5} />
-                </div>
-                <Button onClick={handleLogActivity} disabled={!activityType || isLoading} className="w-full">
-                    {isLoading ? <Loader2 className="animate-spin" /> : "Log Activity"}
-                </Button>
-            </CardContent>
-        </Card>
-    );
-};
-
-const FitnessHistory = ({ newActivityTrigger }: { newActivityTrigger: number }) => {
-    const { user } = useUser();
-    const firestore = useFirestore();
-    
-    const activitiesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/fitnessActivities`), orderBy('completedAt', 'desc'), limit(10));
-    }, [user, firestore, newActivityTrigger]);
-    
-    const { data: activities, isLoading } = useCollection(activitiesQuery);
-
-    return (
-        <Card className="glass-card lg:col-span-3">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><BarChart /> Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {isLoading ? (
-                    <div className="flex items-center justify-center h-40"><Loader2 className="animate-spin text-primary" /></div>
-                ) : activities && activities.length > 0 ? (
-                    activities.map(activity => (
-                        <m.div
-                            key={activity.id}
-                            layout
-                            initial={{ opacity: 0, y: -20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="flex items-center gap-4 bg-black/20 p-3 rounded-lg"
-                        >
-                            <div className="p-2 bg-primary/20 rounded-full text-primary"><Flame /></div>
-                            <div className="flex-1">
-                                <p className="font-bold">{activity.activityType}</p>
-                                <p className="text-sm text-muted-foreground">{activity.duration} minutes</p>
-                            </div>
-                            <p className="text-xs text-muted-foreground">{formatDistanceToNow((activity.completedAt as any).toDate(), { addSuffix: true })}</p>
-                        </m.div>
-                    ))
-                ) : (
-                    <div className="flex items-center justify-center h-40 text-muted-foreground">
-                        <p>Your logged activities will appear here.</p>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
-};
-
 const WorkoutDialog = ({ isOpen, onOpenChange, workout, isLoading, onLogWorkout, isLogging, isLogged, onCustomize, isCustomizing, customizationRequest, setCustomizationRequest }: { isOpen: boolean, onOpenChange: (open: boolean) => void, workout: GenerateWorkoutOutput | null, isLoading: boolean, onLogWorkout: () => void, isLogging: boolean, isLogged: boolean, onCustomize: (request: string) => Promise<void>, isCustomizing: boolean, customizationRequest: string, setCustomizationRequest: (req: string) => void }) => {
     
-    const handleCustomization = async () => {
+    const handleCustomization = useCallback(async () => {
         if (!customizationRequest.trim() || !workout) return;
         await onCustomize(customizationRequest);
-    };
+    }, [customizationRequest, workout, onCustomize]);
+
+    const handleCustomizationRequestChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        setCustomizationRequest(e.target.value);
+    }, [setCustomizationRequest]);
     
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -304,6 +220,14 @@ const WorkoutDialog = ({ isOpen, onOpenChange, workout, isLoading, onLogWorkout,
                         </div>
                     ) : workout ? (
                         <div className="space-y-6">
+                            {workout.difficultyAnalysis && (
+                                <Alert className="bg-primary/10 border-primary/20">
+                                    <Info className="text-primary" />
+                                    <AlertDescription className="text-primary-foreground/80">
+                                        {workout.difficultyAnalysis}
+                                    </AlertDescription>
+                                </Alert>
+                            )}
                             <div>
                                 <h3 className="font-bold text-lg text-primary mb-2">Warm-Up</h3>
                                 <p className="text-muted-foreground">{workout.warmup}</p>
@@ -333,7 +257,7 @@ const WorkoutDialog = ({ isOpen, onOpenChange, workout, isLoading, onLogWorkout,
                                     <Input 
                                         placeholder="e.g., 'Make it shorter' or 'No dumbbells'"
                                         value={customizationRequest}
-                                        onChange={(e) => setCustomizationRequest(e.target.value)}
+                                        onChange={handleCustomizationRequestChange}
                                         disabled={isCustomizing}
                                     />
                                     <Button onClick={handleCustomization} disabled={isCustomizing || !customizationRequest.trim()}>
@@ -364,6 +288,90 @@ const WorkoutDialog = ({ isOpen, onOpenChange, workout, isLoading, onLogWorkout,
     );
 };
 
+const EffectivenessDialog = ({
+    isOpen,
+    onOpenChange,
+    onAnalyze,
+    workoutName,
+    analysisResult,
+    isAnalyzing
+}: {
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+    onAnalyze: (effort: number) => void;
+    workoutName: string;
+    analysisResult: WorkoutEffectivenessOutput | null;
+    isAnalyzing: boolean;
+}) => {
+    const [effortLevel, setEffortLevel] = useState(5);
+    const effortLabels = [
+        "Very Light", "Very Light", "Light", "Light", "Moderate", "Moderate", 
+        "Hard", "Hard", "Very Hard", "Max Effort"
+    ];
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+            <DialogContent className="glass-card">
+                <DialogHeader>
+                    <DialogTitle>Workout Effectiveness</DialogTitle>
+                    <DialogDescription>
+                        How would you rate the effort for your <span className="font-bold text-primary">{workoutName}</span> workout?
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-6">
+                    {isAnalyzing ? (
+                        <div className="flex items-center justify-center gap-3 text-muted-foreground h-40">
+                            <Loader2 className="animate-spin" />
+                            <span>Analyzing your feedback...</span>
+                        </div>
+                    ) : analysisResult ? (
+                        <div className="text-center space-y-4">
+                             <div className="relative size-40 mx-auto flex items-center justify-center">
+                                <svg className="absolute size-full transform -rotate-90">
+                                    <circle className="text-muted/20" strokeWidth="10" stroke="currentColor" fill="transparent" r="45" cx="50%" cy="50%" />
+                                    <m.circle
+                                        className="text-secondary"
+                                        strokeWidth="10"
+                                        strokeDasharray={2 * Math.PI * 45}
+                                        strokeLinecap="round" stroke="currentColor" fill="transparent" r="45" cx="50%" cy="50%"
+                                        initial={{ strokeDashoffset: 2 * Math.PI * 45 }}
+                                        animate={{ strokeDashoffset: (2 * Math.PI * 45) * (1 - (analysisResult.effectivenessScore || 0) / 100) }}
+                                        transition={{ duration: 1, ease: 'easeOut' }}
+                                    />
+                                </svg>
+                                 <div className="text-4xl font-bold font-code">{analysisResult.effectivenessScore}</div>
+                            </div>
+                            <h3 className="text-lg font-bold">Effectiveness Score</h3>
+                            <p className="text-muted-foreground italic">"{analysisResult.feedback}"</p>
+                        </div>
+                    ) : (
+                         <div className="space-y-4">
+                            <Label htmlFor="effort-slider">Rate of Perceived Exertion (RPE): <span className="font-bold text-primary">{effortLevel} / 10</span></Label>
+                            <Slider
+                                id="effort-slider"
+                                min={1}
+                                max={10}
+                                step={1}
+                                value={[effortLevel]}
+                                onValueChange={(value) => setEffortLevel(value[0])}
+                            />
+                            <p className="text-center text-muted-foreground text-sm">{effortLabels[effortLevel - 1]}</p>
+                         </div>
+                    )}
+                </div>
+                <DialogFooter>
+                    {!analysisResult && (
+                        <Button onClick={() => onAnalyze(effortLevel)} disabled={isAnalyzing}>
+                           {isAnalyzing ? <Loader2 className="animate-spin" /> : <Sparkles className="mr-2" />}
+                            Analyze My Effort
+                        </Button>
+                    )}
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
 
 export default function FitnessPage() {
     const [newActivityTrigger, setNewActivityTrigger] = useState(0);
@@ -376,73 +384,60 @@ export default function FitnessPage() {
     const [customizationRequest, setCustomizationRequest] = useState('');
     const [isLoggingWorkout, setIsLoggingWorkout] = useState(false);
     const [isWorkoutLogged, setIsWorkoutLogged] = useState(false);
+    const [loggedActivityId, setLoggedActivityId] = useState<string | null>(null);
+    const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
     const { toast } = useToast();
     const { user } = useUser();
+    const { userProfile, isLoading: isProfileLoading } = useUserProfile();
     const firestore = useFirestore();
 
-    const [restRecommendation, setRestRecommendation] = useState<RestDayRecommenderOutput | null>(null);
+    const [recoveryRecommendation, setRecoveryRecommendation] = useState<RecoveryRecommenderOutput | null>(null);
     const [isRecommendationLoading, setIsRecommendationLoading] = useState(true);
 
-    const cyclesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, 'users', user.uid, 'cycles'), orderBy('startDate', 'desc'), limit(1));
-    }, [user, firestore]);
-    const { data: cyclesData } = useCollection(cyclesQuery);
-    const latestCycle = useMemo(() => cyclesData?.[0], [cyclesData]);
+    const [isEffectivenessDialogOpen, setIsEffectivenessDialogOpen] = useState(false);
+    const [effectivenessAnalysis, setEffectivenessAnalysis] = useState<WorkoutEffectivenessOutput | null>(null);
+    const [isAnalyzingEffectiveness, setIsAnalyzingEffectiveness] = useState(false);
 
-    const currentPhase = useMemo(() => {
-        if (latestCycle?.startDate && !latestCycle.endDate) {
-            const start = (latestCycle.startDate as any).toDate();
-            const day = differenceInDays(new Date(), start) + 1;
-            if (day <= 0) return 'unknown';
-
-            const avgCycleLength = (latestCycle.length && typeof latestCycle.length === 'number' && latestCycle.length > 0) ? latestCycle.length : 28;
-            const ovulationDay = Math.round(avgCycleLength - 14);
-            const follicularEnd = ovulationDay > 5 ? ovulationDay - 3 : 5;
-            const ovulationEnd = ovulationDay + 2;
-
-            if (day <= 5) return 'menstrual';
-            if (day <= follicularEnd) return 'follicular';
-            if (day <= ovulationEnd) return 'ovulation';
-            if (day <= avgCycleLength) return 'luteal';
-        }
-        return 'unknown';
-    }, [latestCycle]);
-
-    const recentFitnessQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        const oneWeekAgo = subDays(new Date(), 7);
-        return query(
-            collection(firestore, `users/${user.uid}/fitnessActivities`), 
-            where('completedAt', '>=', Timestamp.fromDate(oneWeekAgo)),
-            orderBy('completedAt', 'desc')
-        );
-    }, [user, firestore, newActivityTrigger]);
-    const { data: recentFitnessData, isLoading: isFitnessDataLoading } = useCollection(recentFitnessQuery);
+    const { cyclePhase, recentFitnessActivities, recentSymptoms, areFitnessActivitiesLoading, areSymptomsLoading } = useUserHealthData();
 
 
     useEffect(() => {
+        if (!isProfileLoading && userProfile?.availableEquipment) {
+            setSelectedEquipment(userProfile.availableEquipment);
+        }
+    }, [userProfile, isProfileLoading]);
+
+    useEffect(() => {
         const getRecommendation = async () => {
-            if (isFitnessDataLoading) return;
+            if (areFitnessActivitiesLoading || areSymptomsLoading) return;
             
             setIsRecommendationLoading(true);
             try {
-                const result = await recommendRestDay({ 
-                    fitnessData: JSON.stringify(recentFitnessData || []),
-                    cyclePhase: currentPhase as any,
+                const healthSnapshot = JSON.stringify({
+                    fitness: recentFitnessActivities || [],
+                    symptoms: recentSymptoms || [],
                 });
-                setRestRecommendation(result);
+
+                const result = await recommendRecoveryAction({ 
+                    healthSnapshot,
+                    cyclePhase: (cyclePhase.toLowerCase() || 'unknown') as any,
+                });
+                setRecoveryRecommendation(result);
             } catch (error) {
-                setRestRecommendation(null);
+                setRecoveryRecommendation(null);
             } finally {
                 setIsRecommendationLoading(false);
             }
         };
         getRecommendation();
-    }, [recentFitnessData, isFitnessDataLoading, currentPhase]);
+    }, [recentFitnessActivities, areFitnessActivitiesLoading, recentSymptoms, areSymptomsLoading, cyclePhase]);
 
 
     const handleStartWorkout = useCallback(async (goal: string) => {
+        if (!user) {
+             toast({ variant: 'destructive', title: 'Error', description: 'You must be logged in to generate a workout.' });
+             return;
+        }
         setIsWorkoutDialogOpen(true);
         setIsGeneratingWorkout(true);
         setGeneratedWorkout(null);
@@ -452,10 +447,13 @@ export default function FitnessPage() {
         setCustomizationRequest('');
         
         try {
-            const result = await generateWorkout({ 
-                cyclePhase: currentPhase as any,
+            const workoutInput: GenerateWorkoutInput = { 
+                userId: user.uid,
                 workoutGoal: goal as any,
-            });
+                equipment: selectedEquipment,
+                workoutHistory: JSON.stringify(recentFitnessActivities?.filter(a => a.activityType?.includes(goal)) || []),
+            };
+            const result = await generateWorkout(workoutInput);
             setGeneratedWorkout(result);
             setOriginalGeneratedWorkout(result);
         } catch (error) {
@@ -468,7 +466,7 @@ export default function FitnessPage() {
         } finally {
             setIsGeneratingWorkout(false);
         }
-    }, [currentPhase, toast]);
+    }, [cyclePhase, toast, selectedEquipment, recentFitnessActivities, user]);
     
     const handleCustomizeWorkout = useCallback(async (request: string) => {
         if (!originalGeneratedWorkout) return;
@@ -477,9 +475,10 @@ export default function FitnessPage() {
             const customized = await customizeWorkout({
                 originalWorkout: originalGeneratedWorkout,
                 customizationRequest: request,
+                equipment: selectedEquipment,
             });
             setGeneratedWorkout(customized);
-            setCustomizationRequest(''); // Clear input on success
+            setCustomizationRequest('');
             toast({
                 title: 'Workout Customized!',
                 description: 'Your workout has been updated with your request.'
@@ -493,10 +492,10 @@ export default function FitnessPage() {
         } finally {
             setIsCustomizing(false);
         }
-    }, [originalGeneratedWorkout, toast]);
+    }, [originalGeneratedWorkout, toast, selectedEquipment]);
 
 
-    const handleLogGeneratedWorkout = async () => {
+    const handleLogGeneratedWorkout = useCallback(async () => {
         if (!user || !firestore || !generatedWorkout || !currentWorkoutGoal) {
             toast({ variant: 'destructive', title: 'Error', description: 'Could not log workout.' });
             return;
@@ -510,23 +509,91 @@ export default function FitnessPage() {
             duration: 45, // Default duration
             completedAt: new Date(),
             notes: JSON.stringify(generatedWorkout), // Save the full workout object
-            cyclePhase: currentPhase,
+            cyclePhase: cyclePhase,
         };
 
         try {
-            await addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'fitnessActivities'), activityData);
+            const docRef = await addDocumentNonBlocking(collection(firestore, 'users', user.uid, 'fitnessActivities'), activityData);
+            setLoggedActivityId(docRef.id);
             toast({ title: 'Workout Logged!', description: `You've completed the ${generatedWorkout.workoutName} workout.` });
             setNewActivityTrigger(t => t + 1);
             setIsWorkoutLogged(true);
+            setIsWorkoutDialogOpen(false);
+            setEffectivenessAnalysis(null);
+            setIsEffectivenessDialogOpen(true);
+
+            const equipmentInWorkout = new Set<string>();
+            generatedWorkout.exercises.forEach(ex => {
+                const description = ex.description.toLowerCase();
+                equipmentOptions.forEach(opt => {
+                    if (description.includes(opt.label.toLowerCase())) {
+                        equipmentInWorkout.add(opt.value);
+                    }
+                });
+            });
+
+            const newEquipment = Array.from(equipmentInWorkout);
+            const userRef = doc(firestore, 'users', user.uid);
+            const currentEquipment = userProfile?.availableEquipment || [];
+            const updatedEquipment = [...new Set([...currentEquipment, ...newEquipment])];
+            
+            if (updatedEquipment.length > currentEquipment.length) {
+                updateDocumentNonBlocking(userRef, { availableEquipment: updatedEquipment });
+            }
+
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error', description: 'Could not save your workout log. Please try again.' });
         } finally {
             setIsLoggingWorkout(false);
         }
-    };
+    }, [user, firestore, generatedWorkout, currentWorkoutGoal, cyclePhase, toast, userProfile]);
+
+    const handleAnalyzeEffectiveness = useCallback(async (effortLevel: number) => {
+        if (!generatedWorkout || !currentWorkoutGoal || !loggedActivityId || !user || !firestore) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Missing context to analyze workout.' });
+            return;
+        }
+        setIsAnalyzingEffectiveness(true);
+        try {
+            const result = await scoreWorkoutEffectiveness({
+                workout: generatedWorkout,
+                workoutGoal: currentWorkoutGoal,
+                effortLevel,
+                cyclePhase: (cyclePhase.toLowerCase() || 'unknown') as any,
+            });
+            setEffectivenessAnalysis(result);
+
+            // Save the analysis to the activity document
+            const activityRef = doc(firestore, 'users', user.uid, 'fitnessActivities', loggedActivityId);
+            updateDocumentNonBlocking(activityRef, {
+                effectiveness: {
+                    score: result.effectivenessScore,
+                    feedback: result.feedback,
+                    effortLevel: effortLevel,
+                }
+            });
+
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Analysis Error', description: 'AI could not score your workout effectiveness.' });
+        } finally {
+            setIsAnalyzingEffectiveness(false);
+        }
+    }, [generatedWorkout, currentWorkoutGoal, cyclePhase, loggedActivityId, user, firestore, toast]);
 
     const handleActivityLogged = useCallback(() => {
         setNewActivityTrigger(t => t + 1);
+    }, []);
+
+    const handleDialogStateChange = useCallback((open: boolean) => {
+        setIsWorkoutDialogOpen(open);
+    }, []);
+
+    const handleEffectivenessDialogStateChange = useCallback((open: boolean) => {
+        setIsEffectivenessDialogOpen(open);
+        if(!open) {
+            // Reset for next time
+            setLoggedActivityId(null);
+        }
     }, []);
 
     return (
@@ -540,21 +607,30 @@ export default function FitnessPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
                  <div className="lg:col-span-1 space-y-6">
-                    <CycleSyncedWorkouts onStartWorkout={handleStartWorkout} currentPhase={currentPhase} />
+                    <CycleSyncedWorkouts onGenerateWorkout={handleStartWorkout} currentPhase={cyclePhase.toLowerCase() || 'unknown'} />
                 </div>
-                <RestDayRecommender recommendation={restRecommendation} isLoading={isRecommendationLoading} />
+                <RecoveryAdvisor recommendation={recoveryRecommendation} isLoading={isRecommendationLoading} />
             </div>
             
             <div>
-                <h2 className="text-2xl font-headline font-bold mb-4">Workout Library</h2>
-                <CardDescription className="mb-4">Select a goal to generate a workout tailored to your needs and current cycle phase.</CardDescription>
+                 <h2 className="text-2xl font-headline font-bold mb-2">Workout Library</h2>
+                <CardDescription className="mb-4">Select your available equipment, then choose a goal to generate a workout tailored to you.</CardDescription>
+                <div className="mb-6">
+                    <MultiSelect
+                        options={equipmentOptions}
+                        value={selectedEquipment}
+                        onChange={setSelectedEquipment}
+                        placeholder="Select your equipment..."
+                        className="w-full md:w-1/2"
+                    />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {workoutCategories.map((cat, index) => (
                         <WorkoutCategoryCard 
                             key={cat.id} 
                             category={cat} 
                             index={index} 
-                            onClick={() => handleStartWorkout(cat.id)}
+                            onClick={handleStartWorkout}
                         />
                     ))}
                 </div>
@@ -571,7 +647,7 @@ export default function FitnessPage() {
 
             <WorkoutDialog
                 isOpen={isWorkoutDialogOpen}
-                onOpenChange={setIsWorkoutDialogOpen}
+                onOpenChange={handleDialogStateChange}
                 workout={generatedWorkout}
                 isLoading={isGeneratingWorkout}
                 onLogWorkout={handleLogGeneratedWorkout}
@@ -581,6 +657,15 @@ export default function FitnessPage() {
                 isCustomizing={isCustomizing}
                 customizationRequest={customizationRequest}
                 setCustomizationRequest={setCustomizationRequest}
+            />
+            
+            <EffectivenessDialog 
+                isOpen={isEffectivenessDialogOpen}
+                onOpenChange={handleEffectivenessDialogStateChange}
+                onAnalyze={handleAnalyzeEffectiveness}
+                workoutName={originalGeneratedWorkout?.workoutName || ''}
+                analysisResult={effectivenessAnalysis}
+                isAnalyzing={isAnalyzingEffectiveness}
             />
         </div>
     );

@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview A flow for customizing a previously generated workout.
+ * @fileOverview A flow for customizing a previously generated workout, considering available equipment.
  *
  * - customizeWorkout - A function that takes a workout and a user request to modify it.
  * - CustomizeWorkoutInput - The input type for the function.
@@ -10,25 +10,14 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
-import { type GenerateWorkoutOutput } from './ai-generated-workout';
-
-// Re-define the schema here for input validation, but use the imported type for output.
-const LocalGenerateWorkoutOutputSchema = z.object({
-  workoutName: z.string(),
-  warmup: z.string(),
-  exercises: z.array(z.object({
-    name: z.string(),
-    sets: z.string(),
-    reps: z.string(),
-    description: z.string(),
-  })),
-  cooldown: z.string(),
-});
+import { GenerateWorkoutOutputSchema } from './types/workout-types';
+import type { GenerateWorkoutOutput } from './types/workout-types';
 
 
 const CustomizeWorkoutInputSchema = z.object({
-  originalWorkout: LocalGenerateWorkoutOutputSchema.describe("The original workout plan that needs to be modified."),
+  originalWorkout: GenerateWorkoutOutputSchema.describe("The original workout plan that needs to be modified."),
   customizationRequest: z.string().describe("The user's natural language request for how to change the workout. For example: 'make it shorter', 'I don't have dumbbells', or 'replace squats with something easier on the knees'."),
+  equipment: z.array(z.string()).optional().describe("A list of fitness equipment the user has available. This is a crucial constraint."),
 });
 
 export type CustomizeWorkoutInput = z.infer<typeof CustomizeWorkoutInputSchema>;
@@ -41,11 +30,12 @@ export async function customizeWorkout(input: CustomizeWorkoutInput): Promise<Cu
 const prompt = ai.definePrompt({
   name: 'customizeWorkoutPrompt',
   input: { schema: CustomizeWorkoutInputSchema },
-  output: { schema: LocalGenerateWorkoutOutputSchema },
+  output: { schema: GenerateWorkoutOutputSchema },
   prompt: `You are an expert fitness coach specializing in PCOS. A user has an existing workout plan and has requested a modification.
 
-Analyze the original workout plan and the user's request. Then, generate a NEW, complete workout plan that incorporates their changes.
+Analyze the original workout plan, the user's request, and their available equipment. Then, generate a NEW, complete workout plan that incorporates their changes under these constraints.
 
+- **Equipment Constraint**: CRITICAL - The new plan MUST only use exercises possible with the 'Available Equipment'. If the list is empty, only suggest bodyweight exercises.
 - The new plan must still be a complete workout (warm-up, exercises, cool-down).
 - The new plan should reflect the user's request, such as adjusting duration, swapping exercises, or changing equipment needs.
 - Maintain the same structure and data format as the original workout.
@@ -58,6 +48,9 @@ Original Workout:
 User's Customization Request:
 "{{{customizationRequest}}}"
 
+Available Equipment:
+{{#if equipment}}{{{json equipment}}}{{else}}None (Bodyweight only){{/if}}
+
 Now, generate the new, modified workout plan.
 `,
 });
@@ -67,7 +60,7 @@ const customizeWorkoutFlow = ai.defineFlow(
   {
     name: 'customizeWorkoutFlow',
     inputSchema: CustomizeWorkoutInputSchema,
-    outputSchema: LocalGenerateWorkoutOutputSchema,
+    outputSchema: GenerateWorkoutOutputSchema,
   },
   async input => {
     const { output } = await prompt(input);

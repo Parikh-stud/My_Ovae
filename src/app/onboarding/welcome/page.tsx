@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowRight } from 'lucide-react';
@@ -12,37 +11,6 @@ import { useUser, useFirestore, setDocumentNonBlocking } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { useToast } from "@/hooks/use-toast";
 
-
-const AnimatedText = ({ text, stagger = 50, onComplete }: { text: string, stagger?: number, onComplete?: () => void }) => {
-  const [revealed, setRevealed] = useState(0);
-
-  useEffect(() => {
-    if (revealed < text.length) {
-      const timer = setTimeout(() => setRevealed(revealed + 1), stagger);
-      return () => clearTimeout(timer);
-    } else if (onComplete) {
-      onComplete();
-    }
-  }, [revealed, text, stagger, onComplete]);
-
-  const chars = text.split('').map((char, i) => (
-    <m.span
-      key={i}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: i * stagger / 1000, duration: 0.3 }}
-      className="inline-block"
-    >
-      {char === ' ' ? ' ' : char}
-    </m.span>
-  ));
-
-  return (
-    <h1 className="text-4xl md:text-5xl font-headline font-bold text-center text-gradient mb-12">
-      {chars}
-    </h1>
-  );
-};
 
 const NameInput = ({ initialName = '', onNameChange }: { initialName?: string, onNameChange: (name: string) => void }) => {
   const [isFocused, setIsFocused] = useState(false);
@@ -94,7 +62,6 @@ export default function WelcomePage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const [name, setName] = useState('');
-  const [showWelcome, setShowWelcome] = useState(false);
   const [showContent, setShowContent] = useState(false);
   const { toast } = useToast();
 
@@ -107,7 +74,7 @@ export default function WelcomePage() {
   }, [user, isUserLoading, router]);
   
   useEffect(() => {
-    const timer = setTimeout(() => setShowWelcome(true), 500); 
+    const timer = setTimeout(() => setShowContent(true), 500); 
     return () => clearTimeout(timer);
   }, []);
 
@@ -124,7 +91,6 @@ export default function WelcomePage() {
         const publicUserData = { displayName: name, id: user.uid };
         
         try {
-            // Use set with merge to create or update both documents
             await Promise.all([
                 setDocumentNonBlocking(userRef, userData, { merge: true }),
                 setDocumentNonBlocking(publicUserRef, publicUserData, { merge: true })
@@ -160,43 +126,33 @@ export default function WelcomePage() {
       <LivingBackground />
       <div className="z-10 flex flex-col items-center justify-center text-center w-full">
         <AnimatePresence>
-          {showWelcome && (
+          {showContent && (
             <m.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.8 }}
-              onAnimationComplete={() => setShowContent(true)}
+               className="w-full max-w-md space-y-8 flex flex-col items-center"
             >
-              <AnimatedText 
-                text={`Welcome, ${name || 'to Your Wellness Journey'}`} 
-                stagger={30}
-              />
+                <h1 className="text-4xl md:text-5xl font-headline font-bold text-center text-gradient mb-4">
+                    Welcome, {name || 'to Your Wellness Journey'}
+                </h1>
+              
+                <NameInput initialName={name} onNameChange={setName} />
+
+                <div className="flex items-center justify-center space-x-4">
+                <Button 
+                    size="lg" 
+                    className="h-16 continue-button-pulse text-lg" 
+                    disabled={!name.trim()}
+                    onClick={handleContinue}
+                >
+                    Continue <ArrowRight className="ml-2" />
+                </Button>
+                </div>
             </m.div>
           )}
         </AnimatePresence>
-        
-        {showContent && (
-          <m.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5, duration: 1 }}
-            className="w-full max-w-md space-y-8 flex flex-col items-center"
-          >
-            <NameInput initialName={name} onNameChange={setName} />
-
-            <div className="flex items-center justify-center space-x-4">
-              <Button 
-                size="lg" 
-                className="h-16 continue-button-pulse text-lg" 
-                disabled={!name.trim()}
-                onClick={handleContinue}
-              >
-                Continue <ArrowRight className="ml-2" />
-              </Button>
-            </div>
-          </m.div>
-        )}
       </div>
     </div>
   );

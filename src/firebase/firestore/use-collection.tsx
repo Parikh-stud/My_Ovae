@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,9 +9,11 @@ import {
   FirestoreError,
   QuerySnapshot,
   CollectionReference,
+  collectionGroup,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { useUser } from '../provider';
 
 /** Utility type to add an 'id' field to a given type T. */
 export type WithId<T> = T & { id: string };
@@ -57,17 +60,30 @@ export function useCollection<T = any>(
   type ResultItemType = WithId<T>;
   type StateDataType = ResultItemType[] | null;
 
+  const { user } = useUser();
   const [data, setData] = useState<StateDataType>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Start as true if query might be null initially
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
   useEffect(() => {
+    // If the query is null or undefined, do not proceed. Return a loading state.
     if (!memoizedTargetRefOrQuery) {
-      setData(null);
-      setIsLoading(false);
-      setError(null);
-      return;
+        setIsLoading(true);
+        setData(null);
+        setError(null);
+        return;
     }
+    
+    // Additional safeguard for collectionGroup queries: they require an authenticated user.
+    // This check prevents attempting the query before the user state is confirmed.
+    const isCollectionGroupQuery = (memoizedTargetRefOrQuery as any)._query?.collectionGroup;
+    if (isCollectionGroupQuery && !user) {
+        setIsLoading(true);
+        setData(null);
+        setError(null);
+        return;
+    }
+
 
     setIsLoading(true);
     setError(null);
@@ -86,10 +102,22 @@ export function useCollection<T = any>(
       },
       (error: FirestoreError) => {
         // This logic extracts the path from either a ref or a query
-        const path: string =
-          memoizedTargetRefOrQuery.type === 'collection'
-            ? (memoizedTargetRefOrQuery as CollectionReference).path
-            : (memoizedTargetRefOrQuery as unknown as InternalQuery)._query.path.canonicalString()
+        let path: string;
+        if (memoizedTargetRefOrQuery.type === 'collection') {
+            path = (memoizedTargetRefOrQuery as CollectionReference).path;
+        } else if (memoizedTargetRefOrQuery.type === 'query' && (memoizedTargetRefOrQuery as any)._query) {
+             // This is for collectionGroup queries which don't have a direct .path
+             // This is a private API access and might break, but it's the most reliable way for now.
+             const internalQuery = (memoizedTargetRefOrQuery as any)._query;
+             if(internalQuery.path) {
+                path = internalQuery.path.canonicalString()
+             } else {
+                path = `collectionGroup(${internalQuery.collectionGroup})`
+             }
+        } else {
+            path = "unknown_path";
+        }
+
 
         const contextualError = new FirestorePermissionError({
           operation: 'list',
@@ -106,7 +134,7 @@ export function useCollection<T = any>(
     );
 
     return () => unsubscribe();
-  }, [memoizedTargetRefOrQuery]); // Re-run if the target query/reference changes.
+  }, [memoizedTargetRefOrQuery, user]); // Re-run if the target query/reference or user changes.
   if(memoizedTargetRefOrQuery && !memoizedTargetRefOrQuery.__memo) {
     throw new Error(memoizedTargetRefOrQuery + ' was not properly memoized using useMemoFirebase');
   }

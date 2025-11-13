@@ -3,12 +3,12 @@
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Fingerprint, Mail, Lock } from "lucide-react";
+import { Mail } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import React, { useEffect, useState } from "react";
 import { LivingBackground } from "@/components/living-background";
-import { m, AnimatePresence } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useAuth, useUser, setDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase";
 import { 
   Auth,
@@ -48,16 +48,6 @@ const GoogleIcon = () => (
     />
   </svg>
 );
-
-const AppleIcon = () => (
-  <svg className="size-5" viewBox="0 0 24 24">
-    <path
-      fill="currentColor"
-      d="M19.33 13.06c-.32.08-.72.2-.95.18c-.23-.02-.63-.17-.93-.17c-1.33 0-2.23.86-3.13.86c-.88 0-1.6-.81-2.93-.81c-1.35 0-2.43.86-3.3.86c-.9 0-1.7-.83-2.98-.83c-.75 0-1.38.33-1.93.73c-1.2.93-1.6 2.5-1.05 4.58c.53 2.1 1.63 3.88 2.93 3.88c.85 0 1.3-.53 2.45-.53c1.13 0 1.5.53 2.5.53c1.23 0 1.83-.9 3.03-.9c1.18 0 1.65.9 2.95.9c1.23 0 1.93-.95 2.58-2.15c-1.18-.73-2.03-2.13-2.03-3.63c0-1.2.6-2.08 1.43-2.58c.25-.15.5-.3.78-.4zM16.9 3.3c.98 0 1.95.53 2.55 1.33c-.93.63-1.95 1.05-3.1 1.05c-.95 0-1.93-.43-2.65-1.13c.98-.78 2.1-.98 3.2-.25z"
-    />
-  </svg>
-);
-
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
@@ -101,7 +91,7 @@ export default function LoginPage() {
                     createdAt: serverTimestamp(),
                     lastLogin: serverTimestamp(),
                     onboardingCompleted: false,
-                    themePreference: 'hormonal-harmony'
+                    themePreference: 'dark'
                 };
                 await setDocumentNonBlocking(userRef, newUserDoc);
                 const publicUserRef = doc(firestore, 'publicUserProfiles', firebaseUser.uid);
@@ -110,7 +100,7 @@ export default function LoginPage() {
                     displayName: firebaseUser.displayName || 'Anonymous',
                     photoURL: firebaseUser.photoURL,
                 });
-                setTheme('hormonal-harmony');
+                setTheme('dark');
                 router.push('/onboarding/welcome');
             }
         } catch (error: any) {
@@ -199,7 +189,12 @@ export default function LoginPage() {
               Continue with Google
             </Button>
             <Button variant="outline" className="w-full animate-biopulse-resting cursor-not-allowed" disabled={true}>
-              <AppleIcon />
+              <svg className="size-5" viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M19.33 13.06c-.32.08-.72.2-.95.18c-.23-.02-.63-.17-.93-.17c-1.33 0-2.23.86-3.13.86c-.88 0-1.6-.81-2.93-.81c-1.35 0-2.43.86-3.3.86c-.9 0-1.7-.83-2.98-.83c-.75 0-1.38.33-1.93.73c-1.2.93-1.6 2.5-1.05 4.58c.53 2.1 1.63 3.88 2.93 3.88c.85 0 1.3-.53 2.45-.53c1.13 0 1.5.53 2.5.53c1.23 0 1.83-.9 3.03-.9c1.18 0 1.65.9 2.95.9c1.23 0 1.93-.95 2.58-2.15c-1.18-.73-2.03-2.13-2.03-3.63c0-1.2.6-2.08 1.43-2.58c.25-.15.5-.3.78-.4zM16.9 3.3c.98 0 1.95.53 2.55 1.33c-.93.63-1.95 1.05-3.1 1.05c-.95 0-1.93-.43-2.65-1.13c.98-.78 2.1-.98 3.2-.25z"
+                />
+              </svg>
               Continue with Apple
             </Button>
           </div>
@@ -224,7 +219,9 @@ export default function LoginPage() {
               />
             </div>
              <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-5" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2s-2 .9-2 2s.9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM9 6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9V6z"/>
+              </svg>
               <Input 
                 type="password" 
                 placeholder="Password" 

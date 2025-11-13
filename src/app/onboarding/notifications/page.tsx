@@ -19,6 +19,7 @@ const DayNightCycle = () => {
     const [time, setTime] = useState<Date | null>(null);
 
     useEffect(() => {
+        // Set time only on the client side to avoid hydration mismatch
         setTime(new Date());
         const timer = setInterval(() => {
             setTime(new Date());

@@ -2,9 +2,9 @@
 'use server';
 
 /**
- * @fileOverview A flow for identifying a user's potential PCOS subtype.
+ * @fileOverview A flow for identifying a user's potential PCOS subtype drivers with percentage-based analysis.
  *
- * - identifyPcosSubtype - A function that analyzes user data to suggest a PCOS subtype.
+ * - identifyPcosSubtype - A function that analyzes user data to suggest PCOS driver scores.
  * - PcosSubtypeInput - The input type for the function.
  * - PcosSubtypeOutput - The return type for the function.
  */
@@ -20,11 +20,21 @@ const PcosSubtypeInputSchema = z.object({
 export type PcosSubtypeInput = z.infer<typeof PcosSubtypeInputSchema>;
 
 const PcosSubtypeOutputSchema = z.object({
-  pcosSubtype: z.enum(['Insulin-Resistant', 'Inflammatory', 'Post-Pill', 'Adrenal', 'Uncertain']).describe('The identified PCOS subtype.'),
-  subtypeDescription: z.string().describe('A detailed, user-friendly explanation of the identified subtype and its primary drivers.'),
-  recommendations: z.string().describe('3-4 actionable, high-level recommendations for managing this specific PCOS subtype (e.g., dietary focus, exercise type, stress management).'),
-  disclaimer: z.string().describe('A non-negotiable disclaimer stating this is not a medical diagnosis and should be discussed with a healthcare professional.')
+    confidenceScore: z.number().min(0).max(100).describe("A confidence score (0-100) for the overall analysis, based on the quality of input data."),
+    phenotypeScores: z.object({
+        insulinResistance: z.number().min(0).max(100).describe('A score (0-100) indicating the likelihood of insulin resistance being a primary driver, based on symptoms like weight gain, sugar cravings, and high insulin/glucose labs.'),
+        inflammation: z.number().min(0).max(100).describe('A score (0-100) indicating the likelihood of chronic inflammation being a primary driver, based on symptoms like fatigue, joint pain, skin issues (eczema), and digestive problems.'),
+        adrenal: z.number().min(0).max(100).describe('A score (0-100) indicating the likelihood of adrenal dysfunction being a primary driver, based on high DHEA-S labs and stress-related symptoms.'),
+        hormonalImbalance: z.number().min(0).max(100).describe('A score (0-100) indicating the likelihood of foundational hormonal imbalance (e.g., LH/FSH ratio) being a primary driver, based on cycle irregularity and specific hormone labs.')
+    }).describe('An object containing independent scores for the four main PCOS phenotype drivers.'),
+    explanation: z.string().describe('A detailed, user-friendly explanation of the primary driver.'),
+    supplementSuggestions: z.array(z.object({
+        name: z.string(),
+        reason: z.string().describe("Educational reason why this supplement may be discussed with a doctor for the primary driver.")
+    })).describe("A list of 2-3 supplement ideas for educational purposes, to be discussed with a healthcare provider."),
+    disclaimer: z.string().describe('A non-negotiable disclaimer stating this is not a medical diagnosis and supplements should be discussed with a healthcare professional.')
 });
+
 export type PcosSubtypeOutput = z.infer<typeof PcosSubtypeOutputSchema>;
 
 export async function identifyPcosSubtype(input: PcosSubtypeInput): Promise<PcosSubtypeOutput> {
@@ -35,26 +45,24 @@ const prompt = ai.definePrompt({
   name: 'pcosSubtypePrompt',
   input: {schema: PcosSubtypeInputSchema},
   output: {schema: PcosSubtypeOutputSchema},
-  prompt: `You are a helpful PCOS health educator AI. Your task is to analyze user-provided data and suggest a potential PCOS subtype.
+  prompt: `You are an expert PCOS health educator AI. Your task is to analyze user data and provide an analysis of their potential PCOS phenotype drivers.
 
-  Here are the primary PCOS subtypes:
-  1.  **Insulin-Resistant PCOS**: The most common type. Characterized by high insulin levels. Key symptoms often include weight gain (especially around the midsection), intense sugar cravings, fatigue after meals, and skin darkening (acanthosis nigricans). Lab results might show elevated insulin or glucose.
-  2.  **Inflammatory PCOS**: Driven by chronic inflammation. Besides classic PCOS symptoms, it can involve issues like unexplained fatigue, joint pain, skin conditions (eczema, psoriasis), headaches, and digestive problems (like IBS).
-  3.  **Post-Pill PCOS**: A temporary form that arises after discontinuing hormonal birth control, which was suppressing ovulation. There's often a surge in androgen symptoms like acne as the body recalibrates. It typically resolves within 6-12 months.
-  4.  **Adrenal PCOS**: A less common type related to an abnormal stress response, not high insulin or inflammation. Often triggered by chronic stress. Key indicators are high levels of DHEA-S (an adrenal androgen) but normal testosterone and insulin. Often presents with fatigue and anxiety.
-
-  Analyze the following user data. Use the lab results as a strong signal if available.
+  **User Data:**
   - Symptoms: {{{symptomSummary}}}
   - Cycle Data: {{{cycleSummary}}}
   - Lab Results: {{{labResultSummary}}}
 
-  Based on the data, determine the most likely PCOS subtype.
-  - If lab results show high androgens (Testosterone, DHEA-S), lean towards Adrenal or Insulin-Resistant.
-  - If lab results show high insulin, lean towards Insulin-Resistant.
-  - If data is insufficient or points to multiple types, classify as 'Uncertain' and explain why.
-  - Provide a clear, empathetic description of the subtype.
-  - Offer 3-4 high-level, actionable recommendations for management.
-  - **CRITICAL**: Always include the following disclaimer verbatim in the 'disclaimer' field: "This is an educational insight, not a medical diagnosis. Please discuss these findings with a qualified healthcare professional to confirm your PCOS subtype and create a formal treatment plan."
+  **Your Task:**
+  1.  **Analyze and Score Independently**: Analyze the user data and assign four independent scores from 0 to 100 for each of the PCOS drivers: \`insulinResistance\`, \`inflammation\`, \`adrenal\`, and \`hormonalImbalance\`. These are NOT a distribution; they are separate scores. For example, a user could score high on both insulin resistance and inflammation.
+      - **Insulin-Resistant Driver**: Look for high insulin labs, weight gain, sugar cravings.
+      - **Inflammatory Driver**: Look for unexplained fatigue, joint pain, skin issues (eczema), digestive problems (IBS).
+      - **Adrenal Driver**: Look for high DHEA-S labs, high stress, anxiety.
+      - **Hormonal Imbalance Driver**: Look for irregular cycles, high LH/FSH ratio.
+  2.  **Identify Primary Driver**: Determine which of the four scores is highest. This is the primary driver.
+  3.  **Generate Explanation**: Based on the primary driver, write a detailed, user-friendly \`explanation\` of what this driver means.
+  4.  **Generate Supplement Suggestions**: For the primary driver, suggest 2-3 supplements for **educational purposes only**. For each, provide a brief, evidence-based reason why it might be considered. **CRITICAL**: Frame these as topics for discussion with a doctor, not as prescriptions. Example: "Inositol - May help improve insulin sensitivity."
+  5.  **Confidence Score**: Based on the completeness and clarity of the provided data, calculate a \`confidenceScore\` (0-100) for your overall analysis. More data (especially labs) means higher confidence.
+  6.  **CRITICAL Disclaimer**: Your response MUST conclude with the following disclaimer, assigned to the 'disclaimer' field, exactly as written: "This is an educational insight, not a medical diagnosis. Please discuss these findings and any potential supplements with a qualified healthcare professional to confirm your PCOS subtype and create a formal treatment plan."
   `,
 });
 

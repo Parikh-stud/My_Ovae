@@ -1,18 +1,16 @@
+
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings, Bell, Shield, Palette, User, Gem, LifeBuoy, Download, Loader2, Save, CheckCircle2 } from 'lucide-react';
+import { Settings, Bell, Shield, User, Gem, LifeBuoy, Download, Loader2, ArrowLeft } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useTheme } from "next-themes";
-import { cn } from "@/lib/utils";
-import { m } from 'framer-motion';
 import { useFirestore, useUser, useAuth, updateDocumentNonBlocking } from '@/firebase';
 import { doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import {
   AlertDialog,
@@ -25,9 +23,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { deleteUser } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
 const SettingsSection = ({ title, description, children }: { title: string, description: string, children: React.ReactNode }) => (
     <Card className="glass-card">
@@ -65,7 +63,7 @@ const NotificationSettings = () => {
         }
     }, [userProfile]);
     
-    const handleToggle = (id: string, enabled: boolean) => {
+    const handleToggle = useCallback((id: string, enabled: boolean) => {
         const newPreferences = { ...preferences, [id]: enabled };
         setPreferences(newPreferences);
         setIsSaving(id);
@@ -84,7 +82,7 @@ const NotificationSettings = () => {
                 setIsSaving(null);
             });
         }
-    };
+    }, [preferences, user, firestore, toast]);
     
     if (isLoading) {
         return (
@@ -129,139 +127,11 @@ const NotificationSettings = () => {
     )
 }
 
-const themePresets = [
-  { id: 'hormonal-harmony', name: 'Hormonal Harmony', description: 'Dynamic colors that shift with your cycle.' },
-  { id: 'lunar-cycle', name: 'Lunar Cycle', description: 'Moon phase inspired aesthetics.' },
-  { id: 'botanical-balance', name: 'Botanical Balance', description: 'Nature and plant-based visuals.' },
-  { id: 'minimal-wellness', name: 'Minimal Wellness', description: 'Clean design with reduced animations.' },
-  { id: 'energy-adaptive', name: 'Energy Adaptive', description: 'Changes based on your energy and mood.' },
-];
-
-const AppearanceSettings = () => {
-    const { theme, setTheme } = useTheme();
-    const { user } = useUser();
-    const firestore = useFirestore();
-    const { toast } = useToast();
-    const [isMounted, setIsMounted] = useState(false);
-
-    useEffect(() => {
-        setIsMounted(true);
-    }, []);
-
-    const handleThemeChange = (newTheme: string) => {
-        setTheme(newTheme);
-        if (user && firestore) {
-            const userRef = doc(firestore, 'users', user.uid);
-            updateDocumentNonBlocking(userRef, { themePreference: newTheme });
-            const themeName = themePresets.find(t => t.id === newTheme)?.name || 'the new theme';
-            toast({ title: "Theme Updated!", description: `Your theme has been set to ${themeName}.` });
-        }
-    }
-
-    return (
-        <SettingsSection title="Theme & Appearance" description="Personalize the look and feel of the app.">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {themePresets.map(preset => (
-                     <m.div
-                        key={preset.id}
-                        whileHover={{ scale: 1.05 }}
-                        onClick={() => handleThemeChange(preset.id)}
-                        className="cursor-pointer"
-                    >
-                        <Card className={cn(
-                            "transition-all",
-                            isMounted && theme === preset.id ? "ring-2 ring-primary border-primary" : "border-border"
-                        )}>
-                            <CardHeader>
-                                <CardTitle className="flex items-center justify-between text-lg">
-                                    {preset.name}
-                                    {isMounted && theme === preset.id && <CheckCircle2 className="text-primary" />}
-                                </CardTitle>
-                                <CardDescription className="text-xs">{preset.description}</CardDescription>
-                            </CardHeader>
-                             <CardContent>
-                                <div className={`h-16 rounded-md theme-${preset.id} border`}>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </m.div>
-                ))}
-            </div>
-        </SettingsSection>
-    )
-}
-
-const ProfileManagement = () => {
-    const { userProfile, isLoading: isProfileLoading } = useUserProfile();
-    const { user } = useUser();
-    const firestore = useFirestore();
-    const { toast } = useToast();
-    const [displayName, setDisplayName] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
-
-    useEffect(() => {
-        if(userProfile?.displayName) {
-            setDisplayName(userProfile.displayName);
-        }
-    }, [userProfile]);
-
-    const handleSaveProfile = () => {
-        if (!user || !firestore || !displayName.trim()) return;
-        setIsSaving(true);
-        const userRef = doc(firestore, 'users', user.uid);
-        const publicUserRef = doc(firestore, 'publicUserProfiles', user.uid);
-        
-        Promise.all([
-             updateDocumentNonBlocking(userRef, { displayName }),
-             updateDocumentNonBlocking(publicUserRef, { displayName })
-        ]).then(() => {
-            toast({ title: "Profile Updated", description: "Your display name has been changed." });
-        }).catch(() => {
-             toast({ variant: 'destructive', title: "Update Failed", description: "Could not save your profile." });
-        }).finally(() => {
-            setIsSaving(false);
-        });
-    }
-
-    if (isProfileLoading) {
-        return (
-            <div className="space-y-4">
-                <Skeleton className="h-10 w-1/3" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-24 self-end" />
-            </div>
-        )
-    }
-
-    return (
-        <div className="space-y-4">
-            <div className="space-y-2">
-                <Label htmlFor="displayName">Display Name</Label>
-                <Input 
-                    id="displayName"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="max-w-sm"
-                />
-            </div>
-            <div className="space-y-2">
-                <Label>Email Address</Label>
-                <Input value={user?.email || ''} disabled className="max-w-sm" />
-            </div>
-             <Button onClick={handleSaveProfile} disabled={isSaving}>
-                {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
-                Save Changes
-            </Button>
-        </div>
-    )
-};
-
-
 const AccountDeletion = () => {
   const { toast } = useToast();
   const auth = useAuth();
   
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = useCallback(async () => {
     const currentUser = auth.currentUser;
     if (currentUser) {
         try {
@@ -278,7 +148,7 @@ const AccountDeletion = () => {
             });
         }
     }
-  }
+  }, [auth, toast]);
 
   return (
     <SettingsSection title="Delete Account" description="Permanently delete your account and all associated data. This action cannot be undone.">
@@ -329,7 +199,7 @@ const PrivacySettings = () => {
         }
     }, [userProfile]);
 
-    const handleToggle = (id: string, enabled: boolean) => {
+    const handleToggle = useCallback((id: string, enabled: boolean) => {
         const newPreferences = { ...preferences, [id]: enabled };
         setPreferences(newPreferences);
         setIsSaving(id);
@@ -347,7 +217,7 @@ const PrivacySettings = () => {
                 setIsSaving(null);
             });
         }
-    };
+    }, [preferences, user, firestore, toast]);
 
     if (isLoading) return <Skeleton className="h-40 w-full" />;
 
@@ -378,28 +248,45 @@ const PrivacySettings = () => {
 
 
 export default function SettingsPage() {
+    const router = useRouter();
     const settingTabs = [
-        { value: "Profile", icon: User },
         { value: "Notifications", icon: Bell },
         { value: "Privacy", icon: Shield },
-        { value: "Appearance", icon: Palette },
         { value: "Subscription", icon: Gem },
         { value: "Support", icon: LifeBuoy },
+        { value: "Account", icon: User },
     ];
     
      const { toast } = useToast();
 
+    const handleRequestExport = useCallback(() => {
+        toast({ title: 'Export Requested', description: 'Your data export is being generated and will be emailed to you.' })
+    }, [toast]);
+    
+    const handleContactSupport = useCallback(() => {
+        toast({title: "Opening Support", description: "You will be redirected to our support center."});
+    }, [toast]);
+
+    const handleProvideFeedback = useCallback(() => {
+        toast({title: "Feedback Form", description: "Thank you for helping us improve!"});
+    }, [toast]);
+
     return (
         <div className="p-4 md:p-8 space-y-4">
             <header className="flex justify-between items-center">
-                <h1 className="text-3xl font-headline font-bold text-gradient flex items-center gap-3">
-                    <Settings className="size-8" />
-                    Settings & Profile
-                </h1>
+                 <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                        <ArrowLeft />
+                    </Button>
+                    <h1 className="text-3xl font-headline font-bold text-gradient flex items-center gap-3">
+                        <Settings className="size-8" />
+                        Settings
+                    </h1>
+                </div>
             </header>
             
-            <Tabs defaultValue="Profile" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 h-auto">
+            <Tabs defaultValue="Notifications" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto">
                     {settingTabs.map(tab => (
                        <TabsTrigger key={tab.value} value={tab.value} className="flex flex-col md:flex-row gap-2 h-12">
                            <tab.icon className="size-5" />
@@ -408,26 +295,11 @@ export default function SettingsPage() {
                     ))}
                 </TabsList>
                 
-                <TabsContent value="Profile" className="pt-6 space-y-6">
-                    <SettingsSection title="Profile Management" description="Manage your personal information and public profile.">
-                        <ProfileManagement />
-                    </SettingsSection>
-                    <SettingsSection title="Data Export" description="Export your data for personal use or to share with your doctor.">
-                        <Button onClick={() => toast({ title: 'Export Requested', description: 'Your data export is being generated and will be emailed to you.' })}>
-                            <Download className="mr-2" />
-                            Request Full Data Export
-                        </Button>
-                    </SettingsSection>
-                    <AccountDeletion />
-                </TabsContent>
                 <TabsContent value="Notifications" className="pt-6">
                    <NotificationSettings />
                 </TabsContent>
                  <TabsContent value="Privacy" className="pt-6">
                     <PrivacySettings />
-                </TabsContent>
-                 <TabsContent value="Appearance" className="pt-6">
-                    <AppearanceSettings />
                 </TabsContent>
                  <TabsContent value="Subscription" className="pt-6">
                     <SettingsSection title="Your Subscription" description="Manage your subscription plan.">
@@ -442,10 +314,19 @@ export default function SettingsPage() {
                  <TabsContent value="Support" className="pt-6">
                     <SettingsSection title="Help & Support" description="Get help or provide feedback.">
                          <div className="flex gap-4">
-                             <Button variant="outline" onClick={() => toast({title: "Opening Support", description: "You will be redirected to our support center."})}>Contact Support</Button>
-                             <Button variant="outline" onClick={() => toast({title: "Feedback Form", description: "Thank you for helping us improve!"})}>Provide Feedback</Button>
+                             <Button variant="outline" onClick={handleContactSupport}>Contact Support</Button>
+                             <Button variant="outline" onClick={handleProvideFeedback}>Provide Feedback</Button>
                          </div>
                     </SettingsSection>
+                </TabsContent>
+                 <TabsContent value="Account" className="pt-6 space-y-6">
+                    <SettingsSection title="Data Export" description="Export your data for personal use or to share with your doctor.">
+                        <Button onClick={handleRequestExport}>
+                            <Download className="mr-2" />
+                            Request Full Data Export
+                        </Button>
+                    </SettingsSection>
+                    <AccountDeletion />
                 </TabsContent>
             </Tabs>
         </div>

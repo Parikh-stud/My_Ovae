@@ -33,11 +33,7 @@ export const LivingBackground = () => {
             initialX: Math.random() * window.innerWidth,
             initialY: Math.random() * window.innerHeight,
         }));
-  }, [isClient]);
-
-  if (!isClient) {
-      return null;
-  }
+    }, [isClient]);
 
   return (
     <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">

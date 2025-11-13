@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { LifeBuoy, Send, MessageSquare, BookOpen, Loader2 } from "lucide-react";
+import { LifeBuoy, Send, MessageSquare, BookOpen, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +11,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { useUser } from "@/firebase";
+import { useRouter } from "next/navigation";
 
 const faqData = [
   {
@@ -128,14 +130,21 @@ const QuickLinks = () => {
 
 
 export default function SupportPage() {
+    const router = useRouter();
+
     return (
         <div className="p-4 md:p-8 space-y-8">
-            <header>
-                <h1 className="text-3xl font-headline font-bold text-gradient flex items-center gap-3">
-                    <LifeBuoy className="size-8" />
-                    Help & Support
-                </h1>
-                <p className="text-muted-foreground mt-1">We're here to help you on your wellness journey.</p>
+            <header className="flex items-center gap-4">
+                 <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                    <ArrowLeft />
+                </Button>
+                <div>
+                    <h1 className="text-3xl font-headline font-bold text-gradient flex items-center gap-3">
+                        <LifeBuoy className="size-8" />
+                        Help & Support
+                    </h1>
+                    <p className="text-muted-foreground mt-1">We're here to help you on your wellness journey.</p>
+                </div>
             </header>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

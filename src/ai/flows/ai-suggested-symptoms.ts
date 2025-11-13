@@ -1,7 +1,8 @@
+
 'use server';
 
 /**
- * @fileOverview A flow for suggesting structured symptom data from natural language text.
+ * @fileOverview A flow for suggesting structured symptom data from natural language text, with contextual understanding of user history.
  *
  * - suggestSymptomsFromText - A function that suggests symptoms.
  * - AISuggestSymptomsInput - The input type for the function.
@@ -19,6 +20,7 @@ const SymptomSuggestionSchema = z.object({
 
 const AISuggestSymptomsInputSchema = z.object({
   text: z.string().describe("The user's natural language description of their symptoms."),
+  symptomHistory: z.string().optional().describe("A JSON string of the user's recently logged symptoms to provide context for phrases like 'same as yesterday' or to learn personal vocabulary."),
 });
 export type AISuggestSymptomsInput = z.infer<typeof AISuggestSymptomsInputSchema>;
 
@@ -35,17 +37,22 @@ const prompt = ai.definePrompt({
   name: 'suggestSymptomsPrompt',
   input: {schema: AISuggestSymptomsInputSchema},
   output: {schema: AISuggestSymptomsOutputSchema},
-  prompt: `You are a helpful medical assistant for a PCOS tracking app. Your task is to analyze a user's text description of their symptoms and convert it into a structured list of symptom objects.
+  prompt: `You are a helpful medical assistant for a PCOS tracking app. Your task is to analyze a user's text description of their symptoms and convert it into a structured list of symptom objects. You have access to their recent symptom history to understand context and personal vocabulary.
 
-Analyze the following user input:
+**Analyze the following user input:**
 "{{{text}}}"
 
-From this text, identify each distinct symptom. For each symptom, determine:
-1.  **symptomType**: A clear, concise name for the symptom (e.g., 'Headache', 'Bloating', 'Fatigue', 'Anxiety', 'Acne', 'Cramps').
-2.  **severity**: An integer from 1 (very mild) to 5 (very severe). Infer this from adjectives like "terrible", "slight", "unbearable", "a little". If no severity is mentioned, default to 3.
-3.  **bodyZone**: The general area of the body affected. Use one of the following: 'Head', 'Face', 'Torso', 'Pelvis', 'General'.
+**Recent Symptom History (for context):**
+{{{symptomHistory}}}
 
-Return an array of suggestion objects. If no symptoms are found, return an empty array.
+**Your Task:**
+1.  **Parse the Text**: Identify each distinct symptom mentioned in the user input.
+2.  **Contextual Understanding**:
+    - If the user says "same as yesterday" or a similar phrase, look at the symptom history for the most recent day and suggest logging those same symptoms.
+    - If the user uses personal slang (e.g., "my tummy hurts"), check if they've previously logged a formal symptom (like 'Abdominal Pain') with a similar description. If so, suggest the formal symptom.
+3.  **Severity Inference**: Infer severity from adjectives. "Terrible" or "unbearable" is 5. "Bad" or "really sore" is 4. "Moderate" or no adjective is 3. "A little" or "slight" is 2. "Very mild" is 1.
+4.  **Body Zone**: Determine the general area of the body affected. Use one of the following: 'Head', 'Face', 'Torso', 'Pelvis', 'General'.
+5.  **Output**: Return an array of suggestion objects. If no clear symptoms are found, return an empty array.
 `,
 });
 

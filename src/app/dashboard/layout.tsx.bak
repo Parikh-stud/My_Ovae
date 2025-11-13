@@ -1,0 +1,221 @@
+
+"use client";
+
+import {
+  Bot,
+  Carrot,
+  CircleUser,
+  Dumbbell,
+  HeartPulse,
+  LayoutDashboard,
+  LifeBuoy,
+  LogOut,
+  Moon,
+  NotebookText,
+  Settings,
+  Sun,
+  TrendingUp,
+  Users,
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { type ReactNode, useEffect } from "react";
+import { AnimatePresence, m } from "framer-motion";
+
+import { Logo } from "@/components/logo";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarProvider,
+  SidebarSeparator,
+  SidebarInset,
+} from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
+import { useAuth, useUser } from "@/firebase";
+import { useTheme } from "next-themes";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+
+
+const menuItems = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/cycle-tracker", label: "Cycle Tracker", icon: Moon },
+  { href: "/symptom-log", label: "Symptom Log", icon: HeartPulse },
+  { href: "/insights", label: "Insights", icon: TrendingUp },
+  { href: "/coaching", label: "AI Coach", icon: Bot },
+  { href: "/community", label: "Sisterhood", icon: Users },
+  { href: "/nutrition", label: "Nutrition", icon: Carrot },
+  { href: "/fitness", label: "Fitness", icon: Dumbbell },
+  { href: "/lab-results", label: "Lab Results", icon: NotebookText },
+];
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const { user, isUserLoading } = useUser();
+  const auth = useAuth();
+  const router = useRouter();
+  const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    if (user && (user as any).themePreference) {
+      setTheme((user as any).themePreference)
+    }
+  }, [user, setTheme])
+
+  if (isUserLoading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user) {
+    router.push("/login");
+    return null;
+  }
+
+  const handleLogout = () => {
+    auth.signOut();
+  };
+
+  return (
+    <SidebarProvider>
+      <div className="flex h-screen max-h-screen">
+        <Sidebar
+          variant="inset"
+          collapsible="icon"
+          className="bg-sidebar border-0"
+        >
+          <SidebarHeader className="p-4">
+            <Logo size="sm" />
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarMenu>
+              {menuItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <Link href={item.href}>
+                    <SidebarMenuButton
+                      isActive={pathname.startsWith(item.href)}
+                      tooltip={{ children: item.label }}
+                    >
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarContent>
+          <SidebarSeparator />
+          <SidebarFooter className="p-4">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="flex items-center gap-3 cursor-pointer p-2 rounded-md hover:bg-sidebar-accent transition-colors">
+                  <div className="relative">
+                    <Avatar className="size-9">
+                      <AvatarImage
+                        src={
+                          user.photoURL ||
+                          `https://picsum.photos/seed/${user.uid}/100/100`
+                        }
+                      />
+                      <AvatarFallback>
+                        {user.displayName?.charAt(0) || user.email?.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute -bottom-0.5 -right-0.5 rounded-full ring-2 ring-sidebar-background bg-green-500 size-3" />
+                  </div>
+                  <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
+                    <p className="font-semibold text-sm truncate">
+                      {user.displayName || "User"}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {user.email}
+                    </p>
+                  </div>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 mb-2" align="end">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <Link href="/profile">
+                  <DropdownMenuItem>
+                    <CircleUser className="mr-2" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                </Link>
+                <Link href="/settings">
+                  <DropdownMenuItem>
+                    <Settings className="mr-2" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                </Link>
+                <Link href="/support">
+                  <DropdownMenuItem>
+                    <LifeBuoy className="mr-2" />
+                    <span>Support</span>
+                  </DropdownMenuItem>
+                </Link>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                    <div className="flex items-center justify-between w-full">
+                        <Label htmlFor="dark-mode-toggle" className="flex items-center gap-2 font-normal cursor-pointer">
+                            <Moon />
+                            <span>Dark Mode</span>
+                        </Label>
+                        <Switch
+                            id="dark-mode-toggle"
+                            checked={theme === 'dark'}
+                            onCheckedChange={(checked) => {
+                                setTheme(checked ? 'dark' : 'light')
+                            }}
+                        />
+                    </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="mr-2" />
+                  <span>Log out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarFooter>
+        </Sidebar>
+
+        <SidebarInset
+          className={cn(
+            "bg-background min-h-screen transition-all duration-300 ease-in-out flex-1"
+          )}
+        >
+          <AnimatePresence mode="wait">
+            <m.div
+              key={pathname}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="h-full"
+            >
+              {children}
+            </m.div>
+          </AnimatePresence>
+        </SidebarInset>
+      </div>
+    </SidebarProvider>
+  );
+}

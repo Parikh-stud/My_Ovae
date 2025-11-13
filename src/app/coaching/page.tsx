@@ -1,24 +1,32 @@
 
 'use client';
 
-import { useState, memo, useCallback, useMemo } from 'react';
-import { Bot, Mic, Send, Loader2, HeartHandshake } from 'lucide-react';
+import { useState, memo, useCallback, useRef, useEffect } from 'react';
+import { Bot, Mic, Send, Loader2, HeartHandshake, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { m } from 'framer-motion';
+import { m, AnimatePresence } from 'framer-motion';
 import { generateCoachingTip } from '@/ai/flows/ai-generated-coaching';
 import { useToast } from '@/hooks/use-toast';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useUser, useFirestore, updateDocumentNonBlocking } from '@/firebase';
 import { useUserProfile } from '@/hooks/use-user-profile';
-import { differenceInDays } from 'date-fns';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import Link from 'next/link';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { doc } from 'firebase/firestore';
 
-const MessageBubble = memo(({ message }: { message: any }) => {
+interface Message {
+    id: number;
+    type: 'user' | 'assistant';
+    text: string;
+    isEmergency: boolean;
+    suggestions?: string[];
+}
+
+const MessageBubble = memo(({ message, onSuggestionClick }: { message: Message; onSuggestionClick: (query: string) => void; }) => {
   const isUser = message.type === 'user';
   
   return (
@@ -26,31 +34,52 @@ const MessageBubble = memo(({ message }: { message: any }) => {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className={cn("flex items-end gap-2", isUser ? 'justify-end' : 'justify-start')}
+      className="flex flex-col gap-2"
     >
-      {!isUser && (
-        <Avatar>
-          <AvatarFallback className="bg-primary/20 text-primary">
-            <Bot size={20} />
-          </AvatarFallback>
-        </Avatar>
-      )}
-      <div 
-        className={cn(
-          "max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-2xl", 
-          isUser 
-            ? "bg-primary text-primary-foreground rounded-br-none" 
-            : "bg-muted rounded-bl-none"
+        <div className={cn("flex items-end gap-2", isUser ? 'justify-end' : 'justify-start')}>
+            {!isUser && (
+                <Avatar>
+                <AvatarFallback className="bg-primary/20 text-primary">
+                    <Bot size={20} />
+                </AvatarFallback>
+                </Avatar>
+            )}
+            <div 
+                className={cn(
+                "max-w-xs md:max-w-md lg:max-w-lg p-3 rounded-2xl", 
+                isUser 
+                    ? "bg-primary text-primary-foreground rounded-br-none" 
+                    : "bg-muted rounded-bl-none"
+                )}
+            >
+                <p className="text-sm">{message.text}</p>
+            </div>
+        </div>
+        {!isUser && message.suggestions && message.suggestions.length > 0 && (
+            <m.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="flex flex-wrap gap-2 pl-12"
+            >
+                {message.suggestions.map((suggestion, index) => (
+                    <Badge 
+                        key={index}
+                        variant="outline" 
+                        className="cursor-pointer hover:bg-accent"
+                        onClick={() => onSuggestionClick(suggestion)}
+                    >
+                        {suggestion}
+                    </Badge>
+                ))}
+            </m.div>
         )}
-      >
-        <p className="text-sm">{message.text}</p>
-      </div>
     </m.div>
   );
 });
 MessageBubble.displayName = 'MessageBubble';
 
-const EmergencyAlert = ({ message }: { message: any }) => (
+const EmergencyAlert = memo(({ message }: { message: Message }) => (
     <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -73,7 +102,8 @@ const EmergencyAlert = ({ message }: { message: any }) => (
             </AlertDescription>
         </Alert>
     </m.div>
-);
+));
+EmergencyAlert.displayName = 'EmergencyAlert';
 
 const TypingIndicator = () => (
     <m.div
@@ -94,18 +124,25 @@ const TypingIndicator = () => (
     </m.div>
 )
 
-const QuickActionCard = ({ action, onQuickAction }: { action: any, onQuickAction: (query: string) => void }) => (
-    <m.div
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => onQuickAction(action.query)}
-    >
-        <Card className="text-center p-4 h-full flex flex-col justify-center items-center cursor-pointer">
-            <div className="text-3xl mb-2">{action.icon}</div>
-            <p className="text-sm font-semibold">{action.title}</p>
-        </Card>
-    </m.div>
-)
+const QuickActionCard = memo(({ action, onQuickAction }: { action: any, onQuickAction: (query: string) => void }) => {
+    const handleClick = useCallback(() => {
+        onQuickAction(action.query)
+    }, [onQuickAction, action.query]);
+
+    return (
+        <m.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleClick}
+        >
+            <Card className="text-center p-4 h-full flex flex-col justify-center items-center cursor-pointer glass-card">
+                <div className="text-3xl mb-2">{action.icon}</div>
+                <p className="text-sm font-semibold">{action.title}</p>
+            </Card>
+        </m.div>
+    )
+});
+QuickActionCard.displayName = 'QuickActionCard';
 
 const quickActions = [
     { 
@@ -131,86 +168,81 @@ const quickActions = [
 ];
 
 export default function AIHealthAssistantPage() {
-    const [messages, setMessages] = useState([
-        { id: 1, type: 'assistant', text: "Hello! I'm your PCOS wellness assistant, Ovie. How can I help you today?", isEmergency: false }
+    const [messages, setMessages] = useState<Message[]>([
+        { id: 1, type: 'assistant', text: "Hello! I'm your PCOS wellness assistant, Ovie. How can I help you today?", isEmergency: false, suggestions: [] }
     ]);
     const [inputValue, setInputValue] = useState('');
     const [isListening, setIsListening] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
     const { user } = useUser();
-    const firestore = useFirestore();
     const { userProfile } = useUserProfile();
-    
-    // --- Data Hooks for AI Context ---
-    const symptomsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/symptomLogs`), orderBy('timestamp', 'desc'), limit(5));
-    }, [user, firestore]);
-    const { data: recentSymptoms } = useCollection(symptomsQuery);
+    const firestore = useFirestore();
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-    const mealsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/nutritionLogs`), orderBy('loggedAt', 'desc'), limit(5));
-    }, [user, firestore]);
-    const { data: recentMeals } = useCollection(mealsQuery);
-
-    const workoutsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/fitnessActivities`), orderBy('completedAt', 'desc'), limit(5));
-    }, [user, firestore]);
-    const { data: recentWorkouts } = useCollection(workoutsQuery);
-    
-    const cyclesQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/cycles`), orderBy('startDate', 'desc'), limit(1));
-    }, [user, firestore]);
-    const { data: cyclesData } = useCollection(cyclesQuery);
-    const latestCycle = useMemo(() => cyclesData?.[0], [cyclesData]);
-    
-    const labResultsQuery = useMemoFirebase(() => {
-        if (!user || !firestore) return null;
-        return query(collection(firestore, `users/${user.uid}/labResults`), orderBy('testDate', 'desc'), limit(3));
-    }, [user, firestore]);
-    const { data: recentLabResults } = useCollection(labResultsQuery);
-    // --- End Data Hooks ---
+    useEffect(() => {
+        if(scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [messages]);
 
     const handleSendMessage = useCallback(async (text: string) => {
-        if (!text.trim() || isLoading) return;
+        if (!text.trim() || isLoading || !user || !userProfile || !firestore) {
+            if (!user || !userProfile) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Error',
+                    description: 'Could not find user profile. Please try again later.'
+                });
+            }
+            return;
+        }
 
-        const newUserMessage = { id: Date.now(), type: 'user', text, isEmergency: false };
+        const newUserMessage: Message = { id: Date.now(), type: 'user', text, isEmergency: false };
         setMessages(prev => [...prev, newUserMessage]);
         setInputValue('');
         setIsLoading(true);
 
         try {
-            // --- Build Comprehensive Context for AI ---
-            const cycleDay = latestCycle?.startDate ? differenceInDays(new Date(), (latestCycle.startDate as any).toDate()) + 1 : null;
-            const cycleContext = cycleDay ? `Currently on day ${cycleDay} of her cycle.` : "No current cycle data available.";
-
             const context = {
-                pcosJourneyProgress: userProfile?.pcosJourneyProgress || 1,
-                recentSymptoms: JSON.stringify(recentSymptoms || []),
-                cycleData: cycleContext,
-                nutritionData: JSON.stringify(recentMeals || []),
-                fitnessData: JSON.stringify(recentWorkouts || []),
-                labResultData: JSON.stringify(recentLabResults || []),
+                userId: user.uid,
                 userQuery: text,
+                userProfile: {
+                    wellnessGoal: userProfile.wellnessGoal || 'General Health',
+                    pcosJourneyProgress: userProfile.pcosJourneyProgress || 1,
+                },
+                conversationHistory: userProfile.conversationHistory || [],
             };
-            // --- End Context Building ---
-
+            
             const result = await generateCoachingTip(context);
-
-            let newAssistantMessage;
+            
+            let newAssistantMessage: Message;
             if (result.isEmergency) {
-                newAssistantMessage = { id: Date.now() + 1, type: 'assistant', text: result.emergencyResponse, isEmergency: true };
+                newAssistantMessage = { id: Date.now() + 1, type: 'assistant', text: result.emergencyResponse, isEmergency: true, suggestions: [] };
             } else {
-                newAssistantMessage = { id: Date.now() + 1, type: 'assistant', text: result.coachingTip, isEmergency: false };
+                newAssistantMessage = { id: Date.now() + 1, type: 'assistant', text: result.coachingTip, isEmergency: false, suggestions: result.suggestedFollowUps };
+                
+                // Save conversation to Firestore
+                const userRef = doc(firestore, 'users', user.uid);
+                const newHistoryEntry = {
+                    userQuery: text,
+                    aiResponse: result.coachingTip,
+                    timestamp: new Date().toISOString(),
+                };
+
+                const updatedHistory = [
+                    ...(userProfile.conversationHistory || []),
+                    newHistoryEntry
+                ].slice(-10); // Keep only the last 10 turns
+
+                updateDocumentNonBlocking(userRef, {
+                    conversationHistory: updatedHistory,
+                });
             }
             setMessages(prev => [...prev, newAssistantMessage]);
 
         } catch (error) {
-            const errorMessage = {id: Date.now() + 1, type: 'assistant', text: "I'm sorry, I couldn't process that. Please try again.", isEmergency: false};
+            const errorMessage: Message = {id: Date.now() + 1, type: 'assistant', text: "I'm sorry, I couldn't process that. Please try again.", isEmergency: false, suggestions: []};
             setMessages(prev => [...prev, errorMessage]);
             toast({
                 variant: 'destructive',
@@ -220,8 +252,21 @@ export default function AIHealthAssistantPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [isLoading, recentSymptoms, recentMeals, recentWorkouts, latestCycle, recentLabResults, toast, userProfile]);
+    }, [isLoading, user, userProfile, firestore, toast]);
     
+    const handleFormSubmit = useCallback((e: React.FormEvent) => {
+        e.preventDefault();
+        handleSendMessage(inputValue);
+    }, [handleSendMessage, inputValue]);
+
+    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        setInputValue(e.target.value);
+    }, []);
+
+    const handleSuggestionClick = useCallback((query: string) => {
+        handleSendMessage(query);
+    }, [handleSendMessage]);
+
     return (
         <div className="flex flex-col h-full max-h-[calc(100vh-2rem)] p-4">
             <div className="flex items-center gap-4 p-4 border-b border-border">
@@ -244,7 +289,7 @@ export default function AIHealthAssistantPage() {
                 </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
                 {messages.length === 1 && !isLoading && (
                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-4">
                          {quickActions.map(action => (
@@ -255,18 +300,18 @@ export default function AIHealthAssistantPage() {
                 {messages.map(message =>
                     message.isEmergency
                         ? <EmergencyAlert key={message.id} message={message} />
-                        : <MessageBubble key={message.id} message={message} />
+                        : <MessageBubble key={message.id} message={message} onSuggestionClick={handleSuggestionClick} />
                 )}
                 {isLoading && <TypingIndicator />}
             </div>
 
-            <form className="mt-auto p-4" onSubmit={(e) => { e.preventDefault(); handleSendMessage(inputValue); }}>
+            <form className="mt-auto p-4" onSubmit={handleFormSubmit}>
                 <div className="relative">
                     <Input 
                         placeholder="Ask about your symptoms, cycle, or wellness..."
                         className="h-12 pl-12 pr-12 rounded-full glass-card-auth text-base"
                         value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
+                        onChange={handleInputChange}
                         disabled={isLoading}
                     />
                     <button type="button" className={cn("absolute left-3 top-1/2 -translate-y-1/2 p-1 rounded-full transition-colors", isListening ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground')}>

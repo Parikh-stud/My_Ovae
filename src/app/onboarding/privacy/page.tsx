@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -259,11 +258,11 @@ export default function PrivacyPage() {
                             className="text-sm text-muted-foreground leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                         >
                             I agree to the{' '}
-                            <Link href="/terms" target="_blank" className="underline text-primary hover:text-primary/80">
+                            <Link href="/terms" target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80">
                                 Terms of Service
                             </Link>{' '}
                             and{' '}
-                            <Link href="/privacy" target="_blank" className="underline text-primary hover:text-primary/80">
+                            <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80">
                                 Privacy Policy
                             </Link>.
                         </label>

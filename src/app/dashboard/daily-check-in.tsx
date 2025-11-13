@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -40,8 +40,8 @@ export function DailyCheckIn() {
 
   const { data: todaysCheckIn, isLoading } = useDoc(checkInRef);
 
-  const handleSave = async () => {
-    if (!user || !firestore) {
+  const handleSave = useCallback(async () => {
+    if (!user || !firestore || !checkInRef) {
       toast({ variant: 'destructive', title: 'Error', description: 'You must be logged in to save your check-in.' });
       return;
     }
@@ -55,14 +55,22 @@ export function DailyCheckIn() {
     };
 
     try {
-      await setDocumentNonBlocking(checkInRef!, checkInData);
+      await setDocumentNonBlocking(checkInRef, checkInData);
       toast({ title: "Check-in Saved!", description: "Your mood and energy for today have been logged." });
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Could not save your check-in. Please try again.' });
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [user, firestore, checkInRef, mood, energy, toast]);
+
+  const handleMoodChange = useCallback((value: number[]) => {
+    setMood(value[0]);
+  }, []);
+
+  const handleEnergyChange = useCallback((value: number[]) => {
+    setEnergy(value[0]);
+  }, []);
 
   if (isLoading || !todayId) {
       return (
@@ -115,11 +123,11 @@ export function DailyCheckIn() {
       <CardContent className="space-y-8">
         <div className="space-y-4">
           <Label>Your Mood: <span className="text-2xl ml-2">{moodEmojis[mood - 1]}</span></Label>
-          <Slider value={[mood]} onValueChange={(v) => setMood(v[0])} min={1} max={5} step={1} />
+          <Slider value={[mood]} onValueChange={handleMoodChange} min={1} max={5} step={1} />
         </div>
         <div className="space-y-4">
           <Label>Your Energy: <span className="text-lg ml-2 text-yellow-400">{energyEmojis[energy - 1]}</span></Label>
-          <Slider value={[energy]} onValueChange={(v) => setEnergy(v[0])} min={1} max={5} step={1} />
+          <Slider value={[energy]} onValueChange={handleEnergyChange} min={1} max={5} step={1} />
         </div>
         <Button onClick={handleSave} disabled={isSaving} className="w-full">
           {isSaving ? <Loader2 className="animate-spin" /> : <Save />}

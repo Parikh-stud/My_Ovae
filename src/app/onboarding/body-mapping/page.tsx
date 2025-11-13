@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { m, AnimatePresence } from 'framer-motion';
-import { ArrowRight, Check, X } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LivingBackground } from '@/components/living-background';
 import { Progress } from '@/components/ui/progress';

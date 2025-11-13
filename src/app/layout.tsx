@@ -5,10 +5,17 @@ import type {Metadata} from 'next';
 import { Toaster } from "@/components/ui/toaster"
 import './globals.css';
 import { MotionProvider } from '@/components/motion-provider';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { FirebaseClientProvider } from '@/firebase';
 import { ThemeProvider } from '@/components/theme-provider';
 import { CookieConsent } from '@/components/cookie-consent';
+import { GlobalNav } from '@/components/navigation/GlobalNav';
+import { Inter, JetBrains_Mono, Playfair_Display, Poppins } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-body' });
+const poppins = Poppins({ subsets: ['latin'], weight: ['700', '900'], variable: '--font-headline' });
+const playfair = Playfair_Display({ subsets: ['latin'], style: 'italic', variable: '--font-accent' });
+const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-code' });
 
 
 export default function RootLayout({
@@ -17,24 +24,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
 
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js')
-          .then(registration => {
-          })
-          .catch(err => {
-          });
-      });
-    }
-  }, []);
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono&family=Playfair+Display:ital@1&family=Poppins:wght@700;900&display=swap" rel="stylesheet" />
         <meta name="application-name" content="MyOvae" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -47,16 +39,18 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="font-body antialiased">
+      <body className={`${inter.variable} ${poppins.variable} ${playfair.variable} ${jetbrains.variable} font-body antialiased`}>
           <ThemeProvider
             attribute="class"
-            defaultTheme="hormonal-harmony"
+            defaultTheme="dark"
             enableSystem={false}
-            themes={['hormonal-harmony', 'lunar-cycle', 'botanical-balance', 'minimal-wellness', 'energy-adaptive']}
+            themes={['dark', 'light']}
           >
             <FirebaseClientProvider>
               <MotionProvider>
-                {children}
+                <GlobalNav>
+                    {children}
+                </GlobalNav>
               </MotionProvider>
             </FirebaseClientProvider>
           </ThemeProvider>
