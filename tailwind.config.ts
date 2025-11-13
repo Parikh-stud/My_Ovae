@@ -11,10 +11,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Inter', 'sans-serif'],
-        headline: ['Poppins', 'sans-serif'],
-        accent: ['Playfair Display', 'serif'],
-        code: ['JetBrains Mono', 'monospace'],
+        body: ['var(--font-body)', 'sans-serif'],
+        headline: ['var(--font-headline)', 'sans-serif'],
+        accent: ['var(--font-accent)', 'serif'],
+        code: ['var(--font-code)', 'monospace'],
       },
       colors: {
         background: 'hsl(var(--background))',
@@ -55,38 +55,11 @@ export default {
           '2': 'hsl(var(--chart-2))',
           '3': 'hsl(var(--chart-3))',
           '4': 'hsl(var(--chart-4))',
-          '5': 'hsl(var(--chart-5))',
-        },
-        sidebar: {
-          DEFAULT: 'hsl(var(--sidebar-background))',
-          foreground: 'hsl(var(--sidebar-foreground))',
-          primary: 'hsl(var(--sidebar-primary))',
-          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
-          accent: 'hsl(var(--sidebar-accent))',
-          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
-          border: 'hsl(var(--sidebar-border))',
-          ring: 'hsl(var(--sidebar-ring))',
         },
         'cycle-menstrual': 'hsl(var(--cycle-menstrual))',
         'cycle-follicular': 'hsl(var(--cycle-follicular))',
         'cycle-ovulation': 'hsl(var(--cycle-ovulation))',
         'cycle-luteal': 'hsl(var(--cycle-luteal))',
-        'theme': {
-            'hormonal-menstrual': 'hsl(var(--cycle-menstrual))',
-            'hormonal-follicular': 'hsl(var(--cycle-follicular))',
-            'hormonal-ovulation': 'hsl(var(--cycle-ovulation))',
-            'hormonal-luteal': 'hsl(var(--cycle-luteal))',
-            'lunar-background': 'hsl(240 10% 10%)',
-            'lunar-foreground': 'hsl(240 5% 90%)',
-            'lunar-primary': 'hsl(240 5% 80%)',
-            'botanical-background': 'hsl(120 20% 10%)',
-            'botanical-primary': 'hsl(130 50% 60%)',
-            'botanical-secondary': 'hsl(35 60% 55%)',
-            'minimal-background': 'hsl(0 0% 98%)',
-            'minimal-primary': 'hsl(200 60% 55%)',
-            'energy-primary': 'hsl(45 90% 55%)',
-            'energy-secondary': 'hsl(190 80% 60%)'
-        }
       },
       borderRadius: {
         lg: 'var(--radius)',

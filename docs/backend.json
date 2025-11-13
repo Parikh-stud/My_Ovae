@@ -43,6 +43,43 @@
           "type": "string",
           "description": "The user's preferred app theme."
         },
+        "dockPreferences": {
+            "type": "object",
+            "description": "Stores user preferences for the navigation dock.",
+            "properties": {
+                "position": {
+                    "type": "string",
+                    "enum": ["bottom", "left", "right"],
+                    "description": "The preferred position of the dock on the screen."
+                },
+                "iconSize": {
+                    "type": "string",
+                    "enum": ["small", "medium", "large"],
+                    "description": "The preferred size of the icons in the dock."
+                }
+            }
+        },
+        "onboarding": {
+          "type": "object",
+          "description": "Stores user's onboarding progress and preferences.",
+          "properties": {
+            "currentStep": {
+              "type": "string"
+            },
+            "journeyStatus": {
+              "type": "object"
+            },
+            "symptoms": {
+              "type": "object"
+            },
+            "notificationPreferences": {
+              "type": "object"
+            },
+            "privacySettings": {
+              "type": "object"
+            }
+          }
+        },
         "emergencyContact": {
           "type": "object",
           "description": "Emergency contact information.",
@@ -65,37 +102,55 @@
         "healthScore": {
           "type": "number",
           "description": "The user's overall health score, calculated periodically."
+        },
+        "dob": {
+          "type": "string",
+          "description": "User's date of birth.",
+          "format": "date"
+        },
+        "journeyStartDate": {
+          "type": "string",
+          "description": "The date the user started their PCOS journey.",
+          "format": "date"
+        },
+        "wellnessGoal": {
+          "type": "string",
+          "description": "The user's primary wellness goal.",
+          "enum": [
+            "Hormone Balance",
+            "Symptom Management",
+            "Cycle Regulation",
+            "Fertility",
+            "Weight Management",
+            "Mental Wellness",
+            "General Health"
+          ]
+        },
+        "conversationHistory": {
+          "type": "array",
+          "description": "Stores the last 10 turns of the user's conversation with the AI coach, Ovie. Entries older than 30 days should be pruned.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "userQuery": {
+                "type": "string"
+              },
+              "aiResponse": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+             "required": ["userQuery", "aiResponse", "timestamp"]
+          }
         }
       },
       "required": [
         "id",
         "email",
         "createdAt"
-      ]
-    },
-    "PublicUserProfile": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "PublicUserProfile",
-      "type": "object",
-      "description": "Represents a limited, public-facing user profile for display in community sections.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the user profile (matches the main UserProfile ID)."
-        },
-        "displayName": {
-          "type": "string",
-          "description": "User's display name."
-        },
-        "photoURL": {
-          "type": "string",
-          "description": "URL of the user's profile photo.",
-          "format": "uri"
-        }
-      },
-      "required": [
-        "id",
-        "displayName"
       ]
     },
     "SymptomLog": {
@@ -622,12 +677,36 @@
         "testType",
         "results"
       ]
+    },
+    "PredictionLog": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "PredictionLog",
+        "type": "object",
+        "description": "Stores the output of an AI symptom prediction for future accuracy tracking.",
+        "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "predictionDate": { "type": "string", "format": "date-time" },
+            "targetSymptom": { "type": "string" },
+            "forecast": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "date": { "type": "string", "format": "date" },
+                        "predictedRisk": { "type": "number" }
+                    },
+                    "required": ["date", "predictedRisk"]
+                }
+            },
+            "wasSymptomLogged": { "type": "boolean", "description": "True if the user actually logged the symptom on the predicted day." }
+        },
+        "required": ["id", "userId", "predictionDate", "targetSymptom", "forecast"]
     }
   },
   "auth": {
     "providers": [
-      "password",
-      "anonymous",
+      "email",
       "google.com"
     ]
   },
@@ -646,7 +725,7 @@
     },
     "/publicUserProfiles/{userId}": {
       "schema": {
-        "$ref": "#/entities/PublicUserProfile"
+        "$ref": "#/entities/UserProfile"
       },
       "description": "Collection to store public-facing user profiles for community display. Read by any authenticated user. Writable only by the user themselves."
     },
@@ -709,6 +788,12 @@
         "$ref": "#/entities/LabResult"
       },
       "description": "Stores lab results for a user."
+    },
+    "/users/{userId}/predictions/{predictionId}": {
+        "schema": {
+            "$ref": "#/entities/PredictionLog"
+        },
+        "description": "Stores historical AI predictions for accuracy tracking."
     }
   }
 }

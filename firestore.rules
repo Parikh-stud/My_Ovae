@@ -1,244 +1,38 @@
-/**
- * @file Firestore Security Rules
- * @description This ruleset enforces a strict user-ownership model for most data,
- *              allowing users to read and write their own data, but preventing access to other users' data.
- *              Public user profiles and community posts have more relaxed read permissions.
- *
- * Data Structure:
- * - User-specific data is nested under /users/{userId}.
- * - Public user profiles are stored in /publicUserProfiles/{userId}.
- * - Community posts are stored in /communityPosts/{communityPostId}.
- *
- * Key Security Decisions:
- * - User listing is disallowed to protect user privacy.
- * - Default security posture for ambiguous relationships is owner-only access.
- * - Schema validation is relaxed to allow for rapid iteration, focusing only on
- *   authorization-critical fields.
- *
- * Denormalization for Authorization:
- * - The 'CommunityPost' entity MUST contain a 'userId' field to enable owner-based
- *   write authorization.
- */
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /**
-     * @description Checks if the request is made by a signed-in user.
-     */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * @description Checks if the authenticated user ID matches the provided user ID.
-     */
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    /**
-     * @description Checks if the authenticated user is the owner of the existing document.
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description Restricts read and write access to user-specific data.
-     * @path /users/{userId}
-     * @allow (create) User with UID 'user123' can create a profile with id: 'user123'.
-     * @deny (create) User with UID 'user123' cannot create a profile with id: 'user456'.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+      allow read, write: if isOwner(userId);
+    }
+    
+    match /users/{userId}/{subcollection}/{docId} {
+      allow read, write: if isOwner(userId);
     }
 
-    /**
-     * @description Restricts read and write access to daily check-in data to the owner.
-     * @path /users/{userId}/dailyCheckIns/{checkInId}
-     * @allow (create) User with UID 'user123' can create a daily check-in.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' daily check-in.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/dailyCheckIns/{checkInId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Allows any authenticated user to read public user profiles, but only the owner can write.
-     * @path /publicUserProfiles/{userId}
-     * @allow (get) Any authenticated user can read a public profile.
-     * @allow (create) User with UID 'user123' can create a public profile with id: 'user123'.
-     * @deny (update) User with UID 'user456' cannot update user 'user123' public profile.
-     * @principle Allows public reads, enforces document ownership for writes.
-     */
     match /publicUserProfiles/{userId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
     }
-
-    /**
-     * @description Restricts read and write access to symptom logs to the owner.
-     * @path /users/{userId}/symptomLogs/{symptomLogId}
-     * @allow (create) User with UID 'user123' can create a symptom log.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' symptom log.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/symptomLogs/{symptomLogId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Restricts read and write access to cycle data to the owner.
-     * @path /users/{userId}/cycles/{cycleId}
-     * @allow (create) User with UID 'user123' can create cycle data.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' cycle data.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/cycles/{cycleId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Restricts read and write access to cycle log data to the owner.
-     * @path /users/{userId}/cycles/{cycleId}/logs/{logId}
-     * @allow (create) User with UID 'user123' can create cycle log data.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' cycle log data.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/cycles/{cycleId}/logs/{logId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Restricts read and write access to mood logs to the owner.
-     * @path /users/{userId}/moodLogs/{moodLogId}
-     * @allow (create) User with UID 'user123' can create a mood log.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' mood log.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/moodLogs/{moodLogId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Restricts read and write access to nutrition logs to the owner.
-     * @path /users/{userId}/nutritionLogs/{nutritionLogId}
-     * @allow (create) User with UID 'user123' can create a nutrition log.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' nutrition log.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/nutritionLogs/{nutritionLogId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Restricts read and write access to fitness activity data to the owner.
-     * @path /users/{userId}/fitnessActivities/{fitnessActivityId}
-     * @allow (create) User with UID 'user123' can create a fitness activity.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' fitness activity.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/fitnessActivities/{fitnessActivityId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Allows any authenticated user to read community posts, but only the owner can write.
-     * @path /communityPosts/{communityPostId}
-     * @allow (get) Any authenticated user can read a community post.
-     * @allow (create) User with UID 'user123' can create a community post with userId: 'user123'.
-     * @deny (update) User with UID 'user456' cannot update user 'user123' community post.
-     * @principle Allows public reads, enforces document ownership for writes.
-     */
-    match /communityPosts/{communityPostId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn();
+    
+    match /communityPosts/{postId} {
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isExistingOwner(resource.data.userId);
-      allow delete: if isExistingOwner(resource.data.userId);
+      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
-    /**
-     * @description Restricts read and write access to subscription data to the owner.
-     * @path /users/{userId}/subscription
-     * @allow (create) User with UID 'user123' can create subscription data.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' subscription data.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/subscription {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Restricts read and write access to healthcare provider data to the owner.
-     * @path /users/{userId}/providers/{providerId}
-     * @allow (create) User with UID 'user123' can create healthcare provider data.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' healthcare provider data.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/providers/{providerId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Restricts read and write access to lab result data to the owner.
-     * @path /users/{userId}/labResults/{resultId}
-     * @allow (create) User with UID 'user123' can create lab result data.
-     * @deny (read) User with UID 'user456' cannot read user 'user123' lab result data.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
-     */
-    match /users/{userId}/labResults/{resultId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+    // Allow collection group queries for a user's own logs.
+    match /{path=**}/logs/{logId} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
     }
   }
 }

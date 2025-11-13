@@ -53,20 +53,6 @@ export interface UserHookResult { // Renamed from UserAuthHookResult for consist
 // React Context
 export const FirebaseContext = createContext<FirebaseContextState | undefined>(undefined);
 
-const notifyServiceWorkerOfSignOut = () => {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
-    return;
-  }
-
-  navigator.serviceWorker.ready
-    .then(registration => {
-      registration.active?.postMessage({ type: 'CLEAR_PRIVATE_CACHE' });
-    })
-    .catch(() => {
-      // Swallow errors silently; cache clearing is best-effort.
-    });
-};
-
 /**
  * FirebaseProvider manages and provides Firebase services and user authentication state.
  */
@@ -92,21 +78,13 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
       return;
     }
 
-    let isInitialAuthResolution = true;
-
     const unsubscribe = onAuthStateChanged(
       auth,
       (firebaseUser) => { // Auth state determined
-        if (!firebaseUser && !isInitialAuthResolution) {
-          notifyServiceWorkerOfSignOut();
-        }
-
         setUserAuthState({ user: firebaseUser, isUserLoading: false, userError: null });
-        isInitialAuthResolution = false;
       },
       (error) => { // Auth listener error
         setUserAuthState({ user: null, isUserLoading: false, userError: error });
-        isInitialAuthResolution = false;
       }
     );
     return () => unsubscribe(); // Cleanup
@@ -182,10 +160,10 @@ type MemoFirebase <T> = T & {__memo?: boolean};
 export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T | (MemoFirebase<T>) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const memoized = useMemo(factory, deps);
-
+  
   if(typeof memoized !== 'object' || memoized === null) return memoized;
   (memoized as MemoFirebase<T>).__memo = true;
-
+  
   return memoized;
 }
 

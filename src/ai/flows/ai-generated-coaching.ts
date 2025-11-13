@@ -95,20 +95,10 @@ const ConversationHistorySchema = z.array(
 ).optional();
 
 const CoachingTipInputSchema = z.object({
-<<<<<<< HEAD
   userId: z.string().describe("The user's unique ID."),
   userQuery: z.string().describe('The specific question or topic the user is asking about.'),
   userProfile: z.any().describe("The user's profile data, including wellnessGoal and pcosJourneyProgress."),
   conversationHistory: ConversationHistorySchema.describe("The last 10 turns of conversation history."),
-=======
-  pcosJourneyProgress: z.number().describe("The user's progress (day number) in the 90-day PCOS journey."),
-  recentSymptoms: z.string().describe("A JSON string of aggregated, de-identified symptom summaries from the user's recent logs."),
-  cycleData: z.string().describe("Information about the user's current menstrual cycle, including day and phase."),
-  nutritionData: z.string().describe("A JSON string of anonymized nutrition summaries from the user's recent meal logs."),
-  fitnessData: z.string().describe("A JSON string of anonymized workout summaries from the user's recent activities."),
-  labResultData: z.string().describe("A JSON string of the user's recent lab results (de-identified if present)."),
-  userQuery: z.string().describe('The specific question or topic the user is asking about.')
->>>>>>> 76e923b3842b51e602a6d0e32f2ea53efa85b1d0
 });
 export type CoachingTipInput = z.infer<typeof CoachingTipInputSchema>;
 
@@ -145,7 +135,6 @@ const prompt = ai.definePrompt({
       *   Conversation History: {{{json conversationHistory}}}
       *   Review the history. If the current query is a follow-up, acknowledge it naturally (e.g., "Following up on our last chat..."). Avoid repeating advice. If you previously suggested something, you can ask, "I suggested X last time, how did that go for you?"
 
-<<<<<<< HEAD
   **3. DATA-DRIVEN ANALYSIS & COACHING (Only if no emergency)**: You must use the provided tools to fetch relevant health data to answer the user's query and find patterns.
       *   **User Profile**:
           - Primary Wellness Goal: {{ userProfile.wellnessGoal }}
@@ -158,21 +147,6 @@ const prompt = ai.definePrompt({
           -   \`confidence\`: Provide a confidence score (0-100) for how strongly the data supports your recommendation.
       *   **Suggest Follow-ups**: Create 2-3 short, relevant 'suggestedFollowUps'.
   `,
-=======
-2.  **COACHING TIP GENERATION (Only if no emergency)**: You are a personalized PCOS wellness coach named Ovie. You are empathetic, knowledgeable, and motivating. Your goal is to provide an actionable, concise wellness tip (2-4 sentences).
-
-Analyze the user's complete health snapshot below to generate a personalized coaching response to their query. Synthesize information from all data sources to find patterns or offer relevant advice.
-
-CONTEXT:
-- PCOS Journey: Day {{{pcosJourneyProgress}}}
-- Cycle: {{{cycleData}}}
-- Recent Symptom Summaries: {{{recentSymptoms}}}
-- Recent Meal Summaries: {{{nutritionData}}}
-- Recent Workout Summaries: {{{fitnessData}}}
-- Recent Lab Results: {{{labResultData}}}
-
-Your concise and empathetic response as Ovie for the 'coachingTip' field:`,
->>>>>>> 76e923b3842b51e602a6d0e32f2ea53efa85b1d0
 });
 
 const generateCoachingTipFlow = ai.defineFlow(
