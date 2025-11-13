@@ -25,7 +25,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Skeleton } from "@/components/ui/skeleton";
 import { deleteUser } from "firebase/auth";
+<<<<<<< HEAD
 import { useRouter } from "next/navigation";
+=======
+import { deleteAccountData } from "./actions/delete-account";
+>>>>>>> 76e923b3842b51e602a6d0e32f2ea53efa85b1d0
 
 const SettingsSection = ({ title, description, children }: { title: string, description: string, children: React.ReactNode }) => (
     <Card className="glass-card">
@@ -130,23 +134,51 @@ const NotificationSettings = () => {
 const AccountDeletion = () => {
   const { toast } = useToast();
   const auth = useAuth();
+<<<<<<< HEAD
   
   const handleDeleteAccount = useCallback(async () => {
+=======
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteAccount = async () => {
+>>>>>>> 76e923b3842b51e602a6d0e32f2ea53efa85b1d0
     const currentUser = auth.currentUser;
-    if (currentUser) {
-        try {
-            await deleteUser(currentUser);
-            toast({
-                title: "Account Deleted",
-                description: "Your account has been permanently deleted."
-            });
-        } catch (error: any) {
-            toast({
-                variant: 'destructive',
-                title: "Deletion Failed",
-                description: `An error occurred: ${error.message}. Please try re-authenticating and trying again.`
-            });
-        }
+    if (!currentUser) {
+      setDeleteError('No authenticated user found. Please sign in again and try deleting your account.');
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const idToken = await currentUser.getIdToken(true);
+      await deleteAccountData({ idToken });
+      await deleteUser(currentUser);
+
+      toast({
+        title: "Account Deleted",
+        description: "Your account and stored data have been permanently removed."
+      });
+    } catch (error: any) {
+      console.error('Account deletion failed', error);
+      let message = 'An unexpected error occurred while deleting your account. Please try again.';
+
+      if (error?.code === 'auth/requires-recent-login') {
+        message = 'Please re-authenticate before deleting your account.';
+      } else if (error instanceof Error && error.message) {
+        message = error.message;
+      }
+
+      setDeleteError(message);
+      toast({
+        variant: 'destructive',
+        title: "Deletion Failed",
+        description: message,
+      });
+    } finally {
+      setIsDeleting(false);
     }
   }, [auth, toast]);
 
@@ -158,7 +190,10 @@ const AccountDeletion = () => {
         </p>
          <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive">Delete Account</Button>
+              <Button variant="destructive" disabled={isDeleting}>
+                {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
+                {isDeleting ? 'Deleting...' : 'Delete Account'}
+              </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -169,11 +204,19 @@ const AccountDeletion = () => {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteAccount}>Continue</AlertDialogAction>
+                <AlertDialogAction onClick={handleDeleteAccount} disabled={isDeleting}>
+                  {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
+                  {isDeleting ? 'Deleting...' : 'Continue'}
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
       </div>
+      {deleteError && (
+        <p className="mt-2 text-sm text-destructive">
+          {deleteError}
+        </p>
+      )}
     </SettingsSection>
   );
 };
@@ -189,13 +232,20 @@ const PrivacySettings = () => {
     const privacySettings = [
         { id: 'provider_sharing', label: 'Healthcare Provider Access', description: 'Allow connected providers to view your data.' },
         { id: 'research_contribution', label: 'Anonymous Research', description: 'Contribute anonymized data to PCOS research.' },
+        { id: 'ai_data_sharing', label: 'AI Wellness Insights', description: 'Allow anonymized data to power AI coaching tips and predictions.' },
     ];
-    
+
+    const defaultPrivacyPreferences = {
+        provider_sharing: false,
+        research_contribution: true,
+        ai_data_sharing: false,
+    };
+
     useEffect(() => {
         if (userProfile?.onboarding?.privacySettings) {
-            setPreferences(userProfile.onboarding.privacySettings);
+            setPreferences({ ...defaultPrivacyPreferences, ...userProfile.onboarding.privacySettings });
         } else if (userProfile) {
-             setPreferences({ provider_sharing: false, research_contribution: true });
+            setPreferences(defaultPrivacyPreferences);
         }
     }, [userProfile]);
 

@@ -13,7 +13,11 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SymptomPredictorInputSchema = z.object({
+<<<<<<< HEAD
   historicalData: z.string().describe('A JSON string of the user\'s recent health data, including symptoms logs, cycle phase, meals, and workouts.'),
+=======
+  historicalData: z.string().describe('A de-identified summary of the user\'s recent health data, including aggregated symptom trends over the last 7-14 days.'),
+>>>>>>> 76e923b3842b51e602a6d0e32f2ea53efa85b1d0
   targetSymptom: z.string().describe('The specific symptom for which a flare-up prediction is requested (e.g., "Fatigue", "Bloating").')
 });
 export type SymptomPredictorInput = z.infer<typeof SymptomPredictorInputSchema>;
@@ -45,7 +49,7 @@ const prompt = ai.definePrompt({
 
 Analyze the provided historical data for patterns. Consider how recent diet, exercise, cycle phase, and other logged symptoms might influence the target symptom over the next week.
 
-- Historical Data: {{{historicalData}}}
+- Aggregated Historical Data: {{{historicalData}}}
 - Symptom to Predict: {{{targetSymptom}}}
 
 Based on your analysis, you must generate a complete 7-day forecast:
